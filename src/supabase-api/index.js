@@ -651,16 +651,36 @@ app.post("/api/evenements", async (req, res) => {
 
 app.put("/api/evenements/:id", async (req, res) => {
   const { id } = req.params;
-  const { titre, lieu, date_evenement, description, type, lien } = req.body;
+  const {
+    titre,
+    lieu,
+    date_evenement,
+    description,
+    type,
+    lien,
+    banniere_url, // Ajout ici
+  } = req.body;
+
+  const updateFields = {
+    titre,
+    lieu,
+    date_evenement,
+    description,
+    type,
+    lien,
+    banniere_url, // Et ici
+  };
+
   const { error } = await supabase
     .from("evenements")
-    .update({ titre, lieu, date_evenement, description, type, lien })
+    .update(updateFields)
     .eq("id", id);
+
   if (error) {
     console.error("❌ Erreur mise à jour événement :", error.message);
-    res.status(500).json({ success: false, error: error.message });
-    return;
+    return res.status(500).json({ success: false, error: error.message });
   }
+
   res.json({ success: true });
 });
 
