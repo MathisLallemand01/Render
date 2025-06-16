@@ -594,20 +594,48 @@ app.get("/api/evenements/:id", async (req, res) => {
 
 //  Ajouter un événement (avec lien)
 
-app.post("/api/evenements", async (req, res) => {
+app.post("/api/evenements", upload.single("banniere"), async (req, res) => {
   const { titre, lieu, date_evenement, description, type, lien } = req.body;
-
+  let banniere_url = null;
+  if (req.file) {
+    try {
+      const fileName = `${Date.now()}-${normalizeFileName(
+        req.file.originalname
+      )}`;
+      const fileBuffer = fs.readFileSync(req.file.path);
+      const { error: uploadError } = await supabase.storage
+        .from("uploads")
+        .upload(fileName, fileBuffer, {
+          contentType: req.file.mimetype,
+          upsert: true,
+        });
+      if (uploadError) {
+        console.error("Erreur upload bannière:", uploadError.message);
+        res.status(500).json({ error: uploadError.message });
+        return;
+      }
+      banniere_url = supabase.storage.from("uploads").getPublicUrl(fileName)
+        .data.publicUrl;
+      try {
+        fs.unlinkSync(req.file.path);
+      } catch (err) {}
+    } catch (err) {
+      res.status(500).json({ error: "Erreur upload bannière: " + err.message });
+      return;
+    }
+  }
+  const insertObj = { titre, lieu, date_evenement, description, type, lien };
+  if (banniere_url) insertObj.banniere_url = banniere_url;
   const { data, error } = await supabase
     .from("evenements")
-    .insert([{ titre, lieu, date_evenement, description, type, lien }])
+    .insert([insertObj])
     .select()
     .single();
-
   if (error) {
     console.error("❌ Erreur ajout événement :", error.message);
-    return res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+    return;
   }
-
   res.json({ success: true, event: data });
 });
 
@@ -616,17 +644,15 @@ app.post("/api/evenements", async (req, res) => {
 app.put("/api/evenements/:id", async (req, res) => {
   const { id } = req.params;
   const { titre, lieu, date_evenement, description, type, lien } = req.body;
-
   const { error } = await supabase
     .from("evenements")
     .update({ titre, lieu, date_evenement, description, type, lien })
     .eq("id", id);
-
   if (error) {
     console.error("❌ Erreur mise à jour événement :", error.message);
-    return res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+    return;
   }
-
   res.json({ success: true });
 });
 
@@ -634,14 +660,12 @@ app.put("/api/evenements/:id", async (req, res) => {
 
 app.delete("/api/evenements/:id", async (req, res) => {
   const { id } = req.params;
-
   const { error } = await supabase.from("evenements").delete().eq("id", id);
-
   if (error) {
     console.error("❌ Erreur suppression événement :", error.message);
-    return res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+    return;
   }
-
   res.json({ success: true });
 });
 
@@ -671,11 +695,10 @@ app.get("/api/documents/:id", async (req, res) => {
     .select("*")
     .eq("id", id)
     .single();
-
   if (error || !data) {
-    return res.status(404).json({ error: "Document non trouvé" });
+    res.status(404).json({ error: "Document non trouvé" });
+    return;
   }
-
   res.json(data);
 });
 
@@ -683,7 +706,6 @@ app.put("/api/documents/:id", upload.single("file"), async (req, res) => {
   const { id } = req.params;
   let { titre, description, date_publication, categorie, file_url } = req.body;
   let newFileUrl = file_url;
-
   if (req.file) {
     try {
       const fileBuffer = fs.readFileSync(req.file.path);
@@ -696,25 +718,21 @@ app.put("/api/documents/:id", upload.single("file"), async (req, res) => {
           contentType: req.file.mimetype,
           upsert: true,
         });
-
       if (uploadError) {
         console.error("Erreur Supabase upload :", uploadError.message);
-        return res.status(500).json({ error: uploadError.message });
+        res.status(500).json({ error: uploadError.message });
+        return;
       }
-
       const { publicUrl } = supabase.storage
         .from("documents")
         .getPublicUrl(fileName).data;
-
       newFileUrl = publicUrl;
-
       try {
         fs.unlinkSync(req.file.path);
       } catch (err) {}
     } catch (err) {
-      return res
-        .status(500)
-        .json({ error: "Erreur upload fichier : " + err.message });
+      res.status(500).json({ error: "Erreur upload fichier : " + err.message });
+      return;
     }
   }
   const updateObj = {
@@ -724,56 +742,47 @@ app.put("/api/documents/:id", upload.single("file"), async (req, res) => {
     categorie,
   };
   if (newFileUrl) updateObj.file_url = newFileUrl;
-
   Object.keys(updateObj).forEach(
     (key) =>
       (updateObj[key] === undefined || updateObj[key] === "") &&
       delete updateObj[key]
   );
-
   const { error } = await supabase
     .from("documents")
     .update(updateObj)
     .eq("id", id);
-
   if (error) {
-    return res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+    return;
   }
-
   res.json({ success: true });
 });
 
 // DELETE un document
 app.delete("/api/documents/:id", async (req, res) => {
   const { id } = req.params;
-
   const { error } = await supabase.from("documents").delete().eq("id", id);
-
   if (error) {
-    return res.status(500).json({ success: false, error: error.message });
+    res.status(500).json({ success: false, error: error.message });
+    return;
   }
-
   res.json({ success: true });
 });
 
 app.post("/api/upload", upload.single("file"), async (req, res) => {
   const file = req.file;
-
   if (!file) {
-    return res.status(400).json({ error: "Aucun fichier envoyé." });
+    res.status(400).json({ error: "Aucun fichier envoyé." });
+    return;
   }
-
   let fileBuffer;
   try {
     fileBuffer = fs.readFileSync(file.path);
   } catch (err) {
-    return res
-      .status(500)
-      .json({ error: "Erreur lecture fichier temporaire." });
+    res.status(500).json({ error: "Erreur lecture fichier temporaire." });
+    return;
   }
-
   const fileName = `${Date.now()}-${normalizeFileName(file.originalname)}`;
-
   try {
     const { error: uploadError } = await supabase.storage
       .from("uploads")
@@ -781,19 +790,17 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
         contentType: file.mimetype,
         upsert: true,
       });
-
     if (uploadError) {
       console.error("Erreur Supabase upload :", uploadError.message);
-      return res.status(500).json({ error: uploadError.message });
+      res.status(500).json({ error: uploadError.message });
+      return;
     }
-
     const { publicUrl } = supabase.storage
       .from("uploads")
       .getPublicUrl(fileName).data;
     try {
       fs.unlinkSync(file.path);
     } catch (err) {}
-
     res.json({ url: publicUrl });
   } catch (err) {
     console.error("Erreur serveur :", err.message);
@@ -806,13 +813,11 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
 app.post("/api/articles", upload.single("image"), async (req, res) => {
   const { titre, description, contenu } = req.body;
   const file = req.file;
-
   if (!titre || !description || !contenu || !file) {
-    return res.status(400).json({ error: "Champs manquants" });
+    res.status(400).json({ error: "Champs manquants" });
+    return;
   }
-
   const fileName = `${Date.now()}-${normalizeFileName(file.originalname)}`;
-
   try {
     const { error: uploadError } = await supabase.storage
       .from("uploads")
@@ -820,16 +825,14 @@ app.post("/api/articles", upload.single("image"), async (req, res) => {
         contentType: file.mimetype,
         upsert: true,
       });
-
     if (uploadError) {
       console.error("❌ Erreur upload image :", uploadError.message);
-      return res.status(500).json({ error: "Erreur upload image Supabase." });
+      res.status(500).json({ error: "Erreur upload image Supabase." });
+      return;
     }
-
     const { publicUrl } = supabase.storage
       .from("uploads")
       .getPublicUrl(fileName).data;
-
     const { error: dbError } = await supabase.from("fil_actualite").insert([
       {
         titre,
@@ -838,12 +841,11 @@ app.post("/api/articles", upload.single("image"), async (req, res) => {
         image_url: publicUrl,
       },
     ]);
-
     if (dbError) {
       console.error("❌ Erreur insertion actualité :", dbError.message);
-      return res.status(500).json({ error: dbError.message });
+      res.status(500).json({ error: dbError.message });
+      return;
     }
-
     res.json({ success: true, image_url: publicUrl });
   } catch (err) {
     console.error("❌ Erreur serveur :", err.message);
