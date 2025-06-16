@@ -594,49 +594,57 @@ app.get("/api/evenements/:id", async (req, res) => {
 
 //  Ajouter un événement (avec lien)
 
-app.post("/api/evenements", upload.single("banniere"), async (req, res) => {
-  const { titre, lieu, date_evenement, description, type, lien } = req.body;
-  let banniere_url = null;
-  if (req.file) {
-    try {
-      const fileName = `${Date.now()}-${normalizeFileName(
-        req.file.originalname
-      )}`;
-      const fileBuffer = fs.readFileSync(req.file.path);
-      const { error: uploadError } = await supabase.storage
-        .from("uploads")
-        .upload(fileName, fileBuffer, {
-          contentType: req.file.mimetype,
-          upsert: true,
-        });
-      if (uploadError) {
-        console.error("Erreur upload bannière:", uploadError.message);
-        res.status(500).json({ error: uploadError.message });
-        return;
-      }
-      banniere_url = supabase.storage.from("uploads").getPublicUrl(fileName)
-        .data.publicUrl;
-      try {
-        fs.unlinkSync(req.file.path);
-      } catch (err) {}
-    } catch (err) {
-      res.status(500).json({ error: "Erreur upload bannière: " + err.message });
-      return;
+app.post("/api/evenements", async (req, res) => {
+  try {
+    const {
+      titre,
+      lieu,
+      date_evenement,
+      description,
+      type,
+      lien,
+      banniere_url, // L'URL de l'image envoyée depuis le front
+    } = req.body;
+
+    // Vérification basique
+    if (!titre || !lieu || !date_evenement || !type) {
+      return res.status(400).json({
+        success: false,
+        error: "Champs obligatoires manquants.",
+      });
     }
+
+    // Création de l'objet à insérer
+    const insertObj = {
+      titre,
+      lieu,
+      date_evenement,
+      description,
+      type,
+      lien,
+      banniere_url: banniere_url || null,
+    };
+
+    // Insertion dans la table "evenements"
+    const { data, error } = await supabase
+      .from("evenements")
+      .insert([insertObj])
+      .select()
+      .single();
+
+    if (error) {
+      console.error("❌ Erreur ajout événement :", error.message);
+      return res.status(500).json({
+        success: false,
+        error: "Erreur lors de l'ajout de l'événement.",
+      });
+    }
+
+    res.json({ success: true, event: data });
+  } catch (err) {
+    console.error("❌ Erreur serveur :", err.message);
+    res.status(500).json({ success: false, error: "Erreur serveur." });
   }
-  const insertObj = { titre, lieu, date_evenement, description, type, lien };
-  if (banniere_url) insertObj.banniere_url = banniere_url;
-  const { data, error } = await supabase
-    .from("evenements")
-    .insert([insertObj])
-    .select()
-    .single();
-  if (error) {
-    console.error("❌ Erreur ajout événement :", error.message);
-    res.status(500).json({ success: false, error: error.message });
-    return;
-  }
-  res.json({ success: true, event: data });
 });
 
 //  Modifier un événement existant (avec lien)
