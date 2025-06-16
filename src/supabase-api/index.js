@@ -78,6 +78,14 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+// Fonction pour normaliser les noms de fichiers (supprimer accents et caractères spéciaux)
+function normalizeFileName(filename) {
+  return filename
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // retire accents
+    .replace(/[^a-zA-Z0-9._-]/g, "_"); // remplace caractères spéciaux par _
+}
+
 app.post("/api/create-user", async (req, res) => {
   const { email, password, role, username } = req.body;
 
@@ -388,7 +396,7 @@ app.post("/api/upload-document", upload.single("file"), async (req, res) => {
       .status(500)
       .json({ error: "Erreur lecture fichier temporaire." });
   }
-  const fileName = `${Date.now()}-${file.originalname}`;
+  const fileName = `${Date.now()}-${normalizeFileName(file.originalname)}`;
   try {
     const { error: uploadError } = await supabase.storage
       .from("documents")
@@ -679,7 +687,9 @@ app.put("/api/documents/:id", upload.single("file"), async (req, res) => {
   if (req.file) {
     try {
       const fileBuffer = fs.readFileSync(req.file.path);
-      const fileName = `${Date.now()}-${req.file.originalname}`;
+      const fileName = `${Date.now()}-${normalizeFileName(
+        req.file.originalname
+      )}`;
       const { error: uploadError } = await supabase.storage
         .from("documents")
         .upload(fileName, fileBuffer, {
@@ -762,7 +772,7 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
       .json({ error: "Erreur lecture fichier temporaire." });
   }
 
-  const fileName = `${Date.now()}-${file.originalname}`;
+  const fileName = `${Date.now()}-${normalizeFileName(file.originalname)}`;
 
   try {
     const { error: uploadError } = await supabase.storage
@@ -801,7 +811,7 @@ app.post("/api/articles", upload.single("image"), async (req, res) => {
     return res.status(400).json({ error: "Champs manquants" });
   }
 
-  const fileName = `${Date.now()}-${file.originalname}`;
+  const fileName = `${Date.now()}-${normalizeFileName(file.originalname)}`;
 
   try {
     const { error: uploadError } = await supabase.storage
