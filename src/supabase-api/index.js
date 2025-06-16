@@ -13,7 +13,7 @@ app.use(express.json());
 
 const supabase1 = createClient(
   "https://vvsagimqstdsgpxqhmyo.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ2c2FnaW1xc3Rkc2dweHFobXlvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NDAyMjcwNCwiZXhwIjoyMDU5NTk4NzA0fQ.2SOGnY4QcWNfXPjRKxHEVd3PAcooe3VdFG7zMkBVVkc" // ⚠️ Utilise la clé de service côté serveur (plus de droits)
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZ2c2FnaW1xc3Rkc2dweHFobXlvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc0NDAyMjcwNCwiZXhwIjoyMDU5NTk4NzA0fQ.2SOGnY4QcWNfXPjRKxHEVd3PAcooe3VdFG7zMkBVVkc"
 );
 
 const checkUserAndAdmin = async (req, res, next) => {
@@ -53,7 +53,6 @@ module.exports = { checkUserAndAdmin };
 const checkAuth = (req, res, next) => {
   console.log("Auth header reçu :", req.headers.authorization);
 
-  // Ajoute ce log pour mieux diagnostiquer
   if (!req.headers.authorization) {
     console.warn("⚠️ Aucun header Authorization reçu !");
   }
@@ -73,17 +72,12 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// 📁 Servir les fichiers localement
-// app.use("/uploads", checkAuth, express.static(path.join(__dirname, "uploads")));
-
-// 📤 Config upload local
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads"),
-  filename: (req, file, cb) => cb(null, file.originalname), // <-- supprime les chiffres devant
+  filename: (req, file, cb) => cb(null, file.originalname),
 });
 const upload = multer({ storage });
 
-// ✅ Créer un utilisateur unique
 app.post("/api/create-user", async (req, res) => {
   const { email, password, role, username } = req.body;
 
@@ -116,8 +110,6 @@ app.post("/api/create-user", async (req, res) => {
   console.log("✅ Utilisateur créé :", user.user.id);
   res.json({ success: true });
 });
-
-// 🔄 Supprimer les vignerons absents du fichier
 app.post("/api/sync-vignerons", checkAuth, async (req, res) => {
   const { emailsToKeep } = req.body;
 
@@ -147,7 +139,6 @@ app.post("/api/sync-vignerons", checkAuth, async (req, res) => {
     }
 
     for (const user of toDelete) {
-      // Supprimer dans Auth
       const { error: authError } = await supabase.auth.admin.deleteUser(
         user.id
       );
@@ -158,8 +149,6 @@ app.post("/api/sync-vignerons", checkAuth, async (req, res) => {
         );
         return res.status(500).json({ error: authError.message });
       }
-
-      // Supprimer dans profils
       const { error: profileError } = await supabase
         .from("profiles")
         .delete()
@@ -180,8 +169,6 @@ app.post("/api/sync-vignerons", checkAuth, async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-// 🧩 Import de masse + synchronisation
 app.post("/api/import-users", async (req, res) => {
   const { users, emailsToKeep } = req.body;
 
@@ -191,8 +178,6 @@ app.post("/api/import-users", async (req, res) => {
 
   const created = [];
   const failed = [];
-
-  // Création utilisateurs
   for (const user of users) {
     const { email, password, role, username } = user;
 
@@ -227,8 +212,6 @@ app.post("/api/import-users", async (req, res) => {
       failed.push({ email, error: err.message });
     }
   }
-
-  // Synchronisation : suppression des vignerons absents
   try {
     const { data: existingVignerons, error } = await supabase
       .from("profiles")
@@ -245,7 +228,6 @@ app.post("/api/import-users", async (req, res) => {
     );
 
     for (const user of toDelete) {
-      // Supprimer dans Auth
       const { error: authError } = await supabase.auth.admin.deleteUser(
         user.id
       );
@@ -256,8 +238,6 @@ app.post("/api/import-users", async (req, res) => {
         );
         return res.status(500).json({ error: authError.message });
       }
-
-      // Supprimer dans profils
       const { error: profileError } = await supabase
         .from("profiles")
         .delete()
@@ -313,8 +293,6 @@ app.get("/api/users", checkUserAndAdmin, async (req, res) => {
         .status(403)
         .json({ error: "Accès réservé aux administrateurs" });
     }
-
-    // ✅ Autorisé, on récupère les utilisateurs
     const { data, error } = await supabase
       .from("profiles")
       .select("id, username, email, role");
@@ -335,13 +313,9 @@ app.get("/api/users", checkUserAndAdmin, async (req, res) => {
 
 app.delete("/api/users/:id", checkUserAndAdmin, async (req, res) => {
   const { id } = req.params;
-
   try {
-    // Supprimer dans Auth
     const { error: authError } = await supabase.auth.admin.deleteUser(id);
     if (authError) throw new Error(authError.message);
-
-    // Supprimer dans la table `profiles`
     const { error: profileError } = await supabase
       .from("profiles")
       .delete()
@@ -356,9 +330,8 @@ app.delete("/api/users/:id", checkUserAndAdmin, async (req, res) => {
   }
 });
 
-// modif un user
+// Modifier un utilisateur
 
-// MODIFIE UN UTILISATEUR
 app.put("/api/users/:id", async (req, res) => {
   const { id } = req.params;
   const { username, email, password } = req.body;
@@ -366,12 +339,11 @@ app.put("/api/users/:id", async (req, res) => {
   const updates = { username, email };
 
   if (password && password.trim() !== "") {
-    // en prod tu devrais hasher ici
     updates.password = password;
   }
 
   const { error } = await supabase
-    .from("profiles") // ✅ correction ici
+    .from("profiles")
     .update(updates)
     .eq("id", id);
 
@@ -401,12 +373,6 @@ app.get("/api/users/:id", checkUserAndAdmin, async (req, res) => {
   res.json(data);
 });
 
-// Supprime l'ancienne route locale d'ajout de document
-// app.post("/api/add-document", upload.single("file"), async (req, res) => {
-//   ...ancienne logique locale...
-// });
-
-// Nouvelle route pour créer un document avec upload dans Supabase Storage (bucket "documents")
 app.post("/api/upload-document", upload.single("file"), async (req, res) => {
   const { titre, description, date_publication, categorie } = req.body;
   const file = req.file;
@@ -414,8 +380,6 @@ app.post("/api/upload-document", upload.single("file"), async (req, res) => {
   if (!titre || !date_publication || !categorie || !file) {
     return res.status(400).json({ error: "Champs requis manquants." });
   }
-
-  // Lis le fichier temporaire créé par multer
   let fileBuffer;
   try {
     fileBuffer = fs.readFileSync(file.path);
@@ -424,11 +388,8 @@ app.post("/api/upload-document", upload.single("file"), async (req, res) => {
       .status(500)
       .json({ error: "Erreur lecture fichier temporaire." });
   }
-
   const fileName = `${Date.now()}-${file.originalname}`;
-
   try {
-    // Upload dans Supabase Storage (bucket "documents")
     const { error: uploadError } = await supabase.storage
       .from("documents")
       .upload(fileName, fileBuffer, {
@@ -440,20 +401,12 @@ app.post("/api/upload-document", upload.single("file"), async (req, res) => {
       console.error("Erreur Supabase upload :", uploadError.message);
       return res.status(500).json({ error: uploadError.message });
     }
-
-    // Récupère l'URL publique du fichier
     const { publicUrl } = supabase.storage
       .from("documents")
       .getPublicUrl(fileName).data;
-
-    // Nettoyage du fichier temporaire local après upload
     try {
       fs.unlinkSync(file.path);
-    } catch (err) {
-      // ignore
-    }
-
-    // Ajoute le document dans la table "documents"
+    } catch (err) {}
     const { error: dbError } = await supabase.from("documents").insert([
       {
         titre,
@@ -479,7 +432,7 @@ app.post("/api/upload-document", upload.single("file"), async (req, res) => {
 app.get("/api/documents", checkAuth, async (req, res) => {
   try {
     const { data, error } = await supabase
-      .from("documents") // ou documents_techniques selon ta table
+      .from("documents")
       .select("*")
       .order("created_at", { ascending: false });
 
@@ -498,9 +451,8 @@ app.get("/api/documents", checkAuth, async (req, res) => {
 app.get("/download/:filename", (req, res) => {
   const filename = req.params.filename;
   const filePath = path.join(__dirname, "uploads", filename);
-
   if (fs.existsSync(filePath)) {
-    return res.download(filePath); // 📥 Force le téléchargement
+    return res.download(filePath);
   } else {
     return res.status(404).send("Fichier introuvable");
   }
@@ -513,13 +465,10 @@ app.post("/api/import-domaines", upload.single("file"), async (req, res) => {
     const workbook = xlsx.readFile(req.file.path);
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const domaines = xlsx.utils.sheet_to_json(sheet);
-
     console.log("Données extraites du fichier :", domaines);
-
-    // Formatage et normalisation
     const formatted = domaines
       .map((row) => {
-        const nom = row.nom?.trim().toLowerCase(); // clé unique normalisée
+        const nom = row.nom?.trim().toLowerCase();
         return {
           nom: nom || null,
           description: row.description || null,
@@ -535,22 +484,19 @@ app.post("/api/import-domaines", upload.single("file"), async (req, res) => {
           type_vigne: row.type_vigne || null,
           variete: row.variete || null,
           nature_vin: row.nature_vin || null,
-          competence: row.competence || null, // <-- ajout du champ compétence
+          competence: row.competence || null,
+          autres_competences: row.autres_competences || null, // Ajout récupération colonne autres_competences
         };
       })
       .filter((row) =>
         Object.values(row).some((value) => value !== null && value !== "")
-      ) // éliminer les lignes vides
-      .filter((row) => row.nom); // éliminer les lignes sans nom
-
-    // Suppression des doublons (nom unique)
+      )
+      .filter((row) => row.nom);
     const uniquesParNom = Array.from(
       new Map(formatted.map((d) => [d.nom, d])).values()
     );
 
     console.log("Données après nettoyage :", uniquesParNom);
-
-    // Upsert dans Supabase
     const { error: upsertError } = await supabase
       .from("domaines_viticoles")
       .upsert(uniquesParNom, { onConflict: ["nom"] });
@@ -559,8 +505,6 @@ app.post("/api/import-domaines", upload.single("file"), async (req, res) => {
       console.error("Erreur lors de l'upsert :", upsertError);
       throw new Error(upsertError.message);
     }
-
-    // Récupérer tous les noms existants dans Supabase
     const { data: allDomaines, error: fetchError } = await supabase
       .from("domaines_viticoles")
       .select("nom");
@@ -569,8 +513,6 @@ app.post("/api/import-domaines", upload.single("file"), async (req, res) => {
       console.error("Erreur lors de la récupération :", fetchError);
       throw new Error(fetchError.message);
     }
-
-    // Identifier les noms à supprimer
     const nomsDansFichier = uniquesParNom.map((d) => d.nom);
     const nomsDansBase = allDomaines.map((d) => d.nom);
     const nomsASupprimer = nomsDansBase.filter(
@@ -599,14 +541,15 @@ app.post("/api/import-domaines", upload.single("file"), async (req, res) => {
     res.status(500).json({ error: "Erreur lors de l'import : " + err.message });
   } finally {
     try {
-      fs.unlinkSync(req.file.path); // Suppression fichier temporaire
+      fs.unlinkSync(req.file.path);
     } catch (err) {
       console.warn("⚠️ Impossible de supprimer le fichier :", err.message);
     }
   }
 });
 
-// 📌 Lister tous les événements
+// Lister tous les événements
+
 app.get("/api/evenements", async (req, res) => {
   const { data, error } = await supabase
     .from("evenements")
@@ -621,7 +564,8 @@ app.get("/api/evenements", async (req, res) => {
   res.json(data);
 });
 
-// 📌 Récupérer un événement par ID
+//  Récupérer un événement par ID
+
 app.get("/api/evenements/:id", async (req, res) => {
   const { id } = req.params;
 
@@ -639,7 +583,8 @@ app.get("/api/evenements/:id", async (req, res) => {
   res.json(data);
 });
 
-// 📌 Ajouter un événement (avec lien)
+//  Ajouter un événement (avec lien)
+
 app.post("/api/evenements", async (req, res) => {
   const { titre, lieu, date_evenement, description, type, lien } = req.body;
 
@@ -657,7 +602,8 @@ app.post("/api/evenements", async (req, res) => {
   res.json({ success: true, event: data });
 });
 
-// 📌 Modifier un événement existant (avec lien)
+//  Modifier un événement existant (avec lien)
+
 app.put("/api/evenements/:id", async (req, res) => {
   const { id } = req.params;
   const { titre, lieu, date_evenement, description, type, lien } = req.body;
@@ -675,7 +621,8 @@ app.put("/api/evenements/:id", async (req, res) => {
   res.json({ success: true });
 });
 
-// 📌 Supprimer un événement
+//  Supprimer un événement
+
 app.delete("/api/evenements/:id", async (req, res) => {
   const { id } = req.params;
 
@@ -689,7 +636,8 @@ app.delete("/api/evenements/:id", async (req, res) => {
   res.json({ success: true });
 });
 
-// 📌 Liste des domaines viticoles
+//  gestion de la liste des domaines viticoles
+
 app.get("/api/domaines", checkAuth, async (req, res) => {
   try {
     const { data, error } = await supabase
@@ -707,7 +655,6 @@ app.get("/api/domaines", checkAuth, async (req, res) => {
 
 // modifier un document le suppr etc
 
-// GET un document par ID
 app.get("/api/documents/:id", async (req, res) => {
   const { id } = req.params;
   const { data, error } = await supabase
@@ -723,13 +670,11 @@ app.get("/api/documents/:id", async (req, res) => {
   res.json(data);
 });
 
-// PUT pour modifier un document (fichier, catégorie, lien, etc.)
 app.put("/api/documents/:id", upload.single("file"), async (req, res) => {
   const { id } = req.params;
   let { titre, description, date_publication, categorie, file_url } = req.body;
   let newFileUrl = file_url;
 
-  // Si un fichier est envoyé, on l'upload dans Supabase Storage et on remplace l'ancien lien
   if (req.file) {
     try {
       const fileBuffer = fs.readFileSync(req.file.path);
@@ -752,23 +697,15 @@ app.put("/api/documents/:id", upload.single("file"), async (req, res) => {
 
       newFileUrl = publicUrl;
 
-      // Nettoyage du fichier temporaire local après upload
       try {
         fs.unlinkSync(req.file.path);
-      } catch (err) {
-        // ignore
-      }
+      } catch (err) {}
     } catch (err) {
       return res
         .status(500)
         .json({ error: "Erreur upload fichier : " + err.message });
     }
   }
-
-  // Si file_url est un lien externe (inputType "link"), il sera déjà dans req.body.file_url
-  // Si file_url est vide et pas de fichier, on ne modifie pas le champ
-
-  // Prépare l'objet de mise à jour
   const updateObj = {
     titre,
     description,
@@ -777,7 +714,6 @@ app.put("/api/documents/:id", upload.single("file"), async (req, res) => {
   };
   if (newFileUrl) updateObj.file_url = newFileUrl;
 
-  // Retire les champs vides pour éviter d'écraser par null
   Object.keys(updateObj).forEach(
     (key) =>
       (updateObj[key] === undefined || updateObj[key] === "") &&
@@ -809,12 +745,6 @@ app.delete("/api/documents/:id", async (req, res) => {
   res.json({ success: true });
 });
 
-// uploads
-
-// Supprime la route locale (inutile avec Supabase Storage)
-// app.use("/uploads", checkAuth, express.static(path.join(__dirname, "uploads")));
-
-// 🔧 ROUTE POUR L'UPLOAD VERS SUPABASE
 app.post("/api/upload", upload.single("file"), async (req, res) => {
   const file = req.file;
 
@@ -822,7 +752,6 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
     return res.status(400).json({ error: "Aucun fichier envoyé." });
   }
 
-  // Lis le fichier temporaire créé par multer
   let fileBuffer;
   try {
     fileBuffer = fs.readFileSync(file.path);
@@ -850,13 +779,9 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
     const { publicUrl } = supabase.storage
       .from("uploads")
       .getPublicUrl(fileName).data;
-
-    // Nettoyage du fichier temporaire local après upload
     try {
       fs.unlinkSync(file.path);
-    } catch (err) {
-      // ignore
-    }
+    } catch (err) {}
 
     res.json({ url: publicUrl });
   } catch (err) {
@@ -878,7 +803,6 @@ app.post("/api/articles", upload.single("image"), async (req, res) => {
   const fileName = `${Date.now()}-${file.originalname}`;
 
   try {
-    // 📤 Upload dans Supabase Storage
     const { error: uploadError } = await supabase.storage
       .from("uploads")
       .upload(fileName, file.buffer, {
@@ -891,18 +815,16 @@ app.post("/api/articles", upload.single("image"), async (req, res) => {
       return res.status(500).json({ error: "Erreur upload image Supabase." });
     }
 
-    // 🌐 Récupération de l’URL publique de l’image
     const { publicUrl } = supabase.storage
       .from("uploads")
       .getPublicUrl(fileName).data;
 
-    // 🗃️ Insertion de l’article dans la base de données
     const { error: dbError } = await supabase.from("fil_actualite").insert([
       {
         titre,
         description,
         contenu,
-        image_url: publicUrl, // ⚠️ Assure-toi que la colonne s’appelle bien "image_url"
+        image_url: publicUrl,
       },
     ]);
 
@@ -918,10 +840,8 @@ app.post("/api/articles", upload.single("image"), async (req, res) => {
   }
 });
 
-// Ajoute la route pour récupérer les catégories distinctes des documents
 app.get("/api/categories", async (req, res) => {
   try {
-    // Récupère toutes les catégories distinctes de la colonne "categorie" de la table "documents"
     const { data, error } = await supabase
       .from("documents")
       .select("categorie")
@@ -929,7 +849,6 @@ app.get("/api/categories", async (req, res) => {
 
     if (error) throw error;
 
-    // Filtre les catégories uniques et non vides
     const uniqueCats = Array.from(
       new Set((data || []).map((d) => d.categorie).filter(Boolean))
     ).map((cat) => ({
@@ -944,7 +863,7 @@ app.get("/api/categories", async (req, res) => {
   }
 });
 
-// 🚀 Lancer le serveur
+// Lanceement du serveur
 app.listen(3001, () => {
   console.log("🚀 API démarrée sur https://render-pfyp.onrender.com/");
 });
