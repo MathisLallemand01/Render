@@ -486,6 +486,7 @@ app.post("/api/import-domaines", upload.single("file"), async (req, res) => {
           nature_vin: row.nature_vin || null,
           competence: row.competence || null,
           autres_competences: row.autres_competences || null, // Ajout récupération colonne autres_competences
+          implication: row.implication || null, // Ajout récupération colonne implication
         };
       })
       .filter((row) =>
