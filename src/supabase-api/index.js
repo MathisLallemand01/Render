@@ -953,6 +953,60 @@ app.delete("/api/faq/:id", async (req, res) => {
   res.json({ success: true });
 });
 
+// Ajouter un partenaire
+app.post("/api/partenaires", async (req, res) => {
+  const { nom, description, url, logo_url } = req.body;
+  if (!nom) {
+    res.status(400).json({ error: "Le nom du partenaire est requis." });
+    return;
+  }
+  const { data, error } = await supabase
+    .from("partenaires")
+    .insert([{ nom, description, url, logo_url }])
+    .select()
+    .single();
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+  res.json({ success: true, partenaire: data });
+});
+
+// Modifier un partenaire
+app.put("/api/partenaires/:id", async (req, res) => {
+  const { id } = req.params;
+  const { nom, description, url, logo_url } = req.body;
+  if (!nom && !description && !url && !logo_url) {
+    res.status(400).json({ error: "Aucune donnée à mettre à jour." });
+    return;
+  }
+  const updateObj = {};
+  if (nom) updateObj.nom = nom;
+  if (description) updateObj.description = description;
+  if (url) updateObj.url = url;
+  if (logo_url) updateObj.logo_url = logo_url;
+  const { error } = await supabase
+    .from("partenaires")
+    .update(updateObj)
+    .eq("id", id);
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+  res.json({ success: true });
+});
+
+// Supprimer un partenaire
+app.delete("/api/partenaires/:id", async (req, res) => {
+  const { id } = req.params;
+  const { error } = await supabase.from("partenaires").delete().eq("id", id);
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+  res.json({ success: true });
+});
+
 // Lanceement du serveur
 app.listen(3001, () => {
   console.log("🚀 API démarrée sur https://render-pfyp.onrender.com/");
