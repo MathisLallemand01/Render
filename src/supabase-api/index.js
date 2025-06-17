@@ -904,6 +904,55 @@ app.get("/api/categories", async (req, res) => {
   }
 });
 
+// Ajouter une question/réponse à la FAQ
+app.post("/api/faq", async (req, res) => {
+  const { question, reponse } = req.body;
+  if (!question || !reponse) {
+    res.status(400).json({ error: "Question et réponse requises." });
+    return;
+  }
+  const { data, error } = await supabase
+    .from("faq")
+    .insert([{ question, reponse }])
+    .select()
+    .single();
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+  res.json({ success: true, faq: data });
+});
+
+// Modifier une question/réponse de la FAQ
+app.put("/api/faq/:id", async (req, res) => {
+  const { id } = req.params;
+  const { question, reponse } = req.body;
+  if (!question && !reponse) {
+    res.status(400).json({ error: "Aucune donnée à mettre à jour." });
+    return;
+  }
+  const updateObj = {};
+  if (question) updateObj.question = question;
+  if (reponse) updateObj.reponse = reponse;
+  const { error } = await supabase.from("faq").update(updateObj).eq("id", id);
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+  res.json({ success: true });
+});
+
+// Supprimer une question/réponse de la FAQ
+app.delete("/api/faq/:id", async (req, res) => {
+  const { id } = req.params;
+  const { error } = await supabase.from("faq").delete().eq("id", id);
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+  res.json({ success: true });
+});
+
 // Lanceement du serveur
 app.listen(3001, () => {
   console.log("🚀 API démarrée sur https://render-pfyp.onrender.com/");
