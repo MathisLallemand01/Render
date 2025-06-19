@@ -1007,13 +1007,13 @@ app.delete("/api/partenaires/:id", async (req, res) => {
   res.json({ success: true });
 });
 
-// Ajouter un article de presse
+// presse
+
 app.post("/api/presse", upload.single("image"), async (req, res) => {
-  const { titre, source, date_publication } = req.body;
   const file = req.file;
 
-  if (!titre || !file) {
-    return res.status(400).json({ error: "Champs manquants (titre ou image)" });
+  if (!file) {
+    return res.status(400).json({ error: "Aucune image fournie." });
   }
 
   const fileName = `${Date.now()}-${normalizeFileName(file.originalname)}`;
@@ -1029,139 +1029,94 @@ app.post("/api/presse", upload.single("image"), async (req, res) => {
       });
 
     if (uploadError) {
-      console.error("❌ Erreur upload image :", uploadError.message);
-      return res.status(500).json({ error: "Erreur upload image Supabase." });
+      return res.status(500).json({ error: "Erreur lors de l'upload." });
     }
 
     const { publicUrl } = supabase.storage
       .from("presse")
       .getPublicUrl(fileName).data;
 
-    try {
-      fs.unlinkSync(file.path);
-    } catch (err) {
-      console.warn(
-        "⚠️ Impossible de supprimer le fichier local :",
-        err.message
-      );
-    }
+    fs.unlinkSync(file.path);
 
     const { data, error: dbError } = await supabase
       .from("presse")
-      .insert([
-        {
-          titre,
-          image_url: publicUrl,
-          image_path: fileName,
-          source: source || null,
-          date_publication: date_publication || null,
-        },
-      ])
+      .insert([{ image_url: publicUrl }])
       .select()
       .single();
 
     if (dbError) {
-      console.error("❌ Erreur insertion base :", dbError.message);
       return res.status(500).json({ error: dbError.message });
     }
 
-    res.json({ success: true, article: data });
+    res.json({ success: true, image: data });
   } catch (err) {
-    console.error("❌ Erreur serveur :", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Modifier un article de presse
 app.put("/api/presse/:id", upload.single("image"), async (req, res) => {
   const { id } = req.params;
-  const { titre, source, date_publication } = req.body;
-  let updateObj = { titre, source, date_publication };
+  const file = req.file;
 
-  // Nettoyage des champs vides
-  Object.keys(updateObj).forEach(
-    (key) =>
-      (updateObj[key] === undefined || updateObj[key] === "") &&
-      delete updateObj[key]
-  );
+  if (!file) {
+    return res.status(400).json({ error: "Aucune image fournie." });
+  }
 
-  let newImageUrl = null;
-  let newImagePath = null;
+  try {
+    // Supprimer l'ancienne image du bucket
+    const { data: old, error: oldError } = await supabase
+      .from("presse")
+      .select("image_url")
+      .eq("id", id)
+      .single();
 
-  if (req.file) {
-    try {
-      // Supprimer l'ancienne image
-      const { data: old, error: oldError } = await supabase
-        .from("presse")
-        .select("image_path")
-        .eq("id", id)
-        .single();
-
-      if (old && old.image_path) {
-        await supabase.storage.from("presse").remove([old.image_path]);
-      }
-
-      const fileBuffer = fs.readFileSync(req.file.path);
-      const fileName = `${Date.now()}-${normalizeFileName(
-        req.file.originalname
-      )}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("presse")
-        .upload(fileName, fileBuffer, {
-          contentType: req.file.mimetype,
-          upsert: true,
-        });
-
-      if (uploadError) {
-        return res.status(500).json({ error: uploadError.message });
-      }
-
-      const { publicUrl } = supabase.storage
-        .from("presse")
-        .getPublicUrl(fileName).data;
-
-      newImageUrl = publicUrl;
-      newImagePath = fileName;
-
-      try {
-        fs.unlinkSync(req.file.path);
-      } catch (err) {
-        console.warn(
-          "⚠️ Impossible de supprimer le fichier local :",
-          err.message
-        );
-      }
-    } catch (err) {
-      return res
-        .status(500)
-        .json({ error: "Erreur upload image : " + err.message });
+    if (old && old.image_url) {
+      const path = old.image_url.split("/").pop();
+      await supabase.storage.from("presse").remove([path]);
     }
+
+    const fileName = `${Date.now()}-${normalizeFileName(file.originalname)}`;
+    const fileBuffer = fs.readFileSync(file.path);
+
+    const { error: uploadError } = await supabase.storage
+      .from("presse")
+      .upload(fileName, fileBuffer, {
+        contentType: file.mimetype,
+        upsert: true,
+      });
+
+    if (uploadError) {
+      return res.status(500).json({ error: uploadError.message });
+    }
+
+    const { publicUrl } = supabase.storage
+      .from("presse")
+      .getPublicUrl(fileName).data;
+
+    fs.unlinkSync(file.path);
+
+    const { error: updateError } = await supabase
+      .from("presse")
+      .update({ image_url: publicUrl })
+      .eq("id", id);
+
+    if (updateError) {
+      return res.status(500).json({ error: updateError.message });
+    }
+
+    res.json({ success: true, image_url: publicUrl });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-
-  if (newImageUrl) updateObj.image_url = newImageUrl;
-  if (newImagePath) updateObj.image_path = newImagePath;
-
-  const { error } = await supabase
-    .from("presse")
-    .update(updateObj)
-    .eq("id", id);
-
-  if (error) {
-    return res.status(500).json({ success: false, error: error.message });
-  }
-
-  res.json({ success: true });
 });
 
-// Supprimer un article de presse
 app.delete("/api/presse/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
     const { data: article, error: fetchError } = await supabase
       .from("presse")
-      .select("image_path")
+      .select("image_url")
       .eq("id", id)
       .single();
 
@@ -1169,14 +1124,18 @@ app.delete("/api/presse/:id", async (req, res) => {
       return res.status(500).json({ error: fetchError.message });
     }
 
-    if (article && article.image_path) {
-      await supabase.storage.from("presse").remove([article.image_path]);
+    if (article && article.image_url) {
+      const fileName = article.image_url.split("/").pop();
+      await supabase.storage.from("presse").remove([fileName]);
     }
 
-    const { error } = await supabase.from("presse").delete().eq("id", id);
+    const { error: deleteError } = await supabase
+      .from("presse")
+      .delete()
+      .eq("id", id);
 
-    if (error) {
-      return res.status(500).json({ success: false, error: error.message });
+    if (deleteError) {
+      return res.status(500).json({ error: deleteError.message });
     }
 
     res.json({ success: true });
