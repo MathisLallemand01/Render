@@ -1,4 +1,4 @@
-const express = require("express");
+﻿const express = require("express");
 const cors = require("cors");
 const multer = require("multer");
 const fs = require("fs");
@@ -19,7 +19,7 @@ const supabase1 = createClient(
 const checkUserAndAdmin = async (req, res, next) => {
   const token = req.headers.authorization?.split(" ")[1];
 
-  if (!token) return res.status(401).json({ error: "accès refusé" });
+  if (!token) return res.status(401).json({ error: "accÃ¨s refusÃ©" });
 
   const { data: userInfo, error: userError } = await supabase.auth.getUser(
     token
@@ -37,11 +37,11 @@ const checkUserAndAdmin = async (req, res, next) => {
   if (profileError) {
     return res
       .status(500)
-      .json({ error: "Erreur lors de la vérification du rôle" });
+      .json({ error: "Erreur lors de la vÃ©rification du rÃ´le" });
   }
 
   if (profile.role !== "admin") {
-    return res.status(403).json({ error: "Accès interdit" });
+    return res.status(403).json({ error: "AccÃ¨s interdit" });
   }
 
   req.user = userInfo.user;
@@ -51,17 +51,17 @@ const checkUserAndAdmin = async (req, res, next) => {
 module.exports = { checkUserAndAdmin };
 
 const checkAuth = (req, res, next) => {
-  console.log("Auth header reçu :", req.headers.authorization);
+  console.log("Auth header reÃ§u :", req.headers.authorization);
 
   if (!req.headers.authorization) {
-    console.warn("⚠️ Aucun header Authorization reçu !");
+    console.warn("âš ï¸ Aucun header Authorization reÃ§u !");
   }
 
   if (
     !req.headers.authorization ||
     req.headers.authorization !== `Bearer ${process.env.API_SECRET}`
   ) {
-    return res.status(403).json({ error: "Accès refusé" });
+    return res.status(403).json({ error: "AccÃ¨s refusÃ©" });
   }
 
   next();
@@ -78,18 +78,10 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// Fonction pour normaliser les noms de fichiers (supprimer accents et caractères spéciaux)
-function normalizeFileName(filename) {
-  return filename
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // retire accents
-    .replace(/[^a-zA-Z0-9._-]/g, "_"); // remplace caractères spéciaux par _
-}
-
 app.post("/api/create-user", async (req, res) => {
   const { email, password, role, username } = req.body;
 
-  console.log("📥 Données reçues :", { email, password, role, username });
+  console.log("ðŸ“¥ DonnÃ©es reÃ§ues :", { email, password, role, username });
 
   if (!email || !password || !role || !username) {
     return res.status(400).json({ error: "Tous les champs sont requis." });
@@ -102,7 +94,7 @@ app.post("/api/create-user", async (req, res) => {
   });
 
   if (error) {
-    console.error("❌ Erreur Auth :", error.message);
+    console.error("âŒ Erreur Auth :", error.message);
     return res.status(400).json({ error: error.message });
   }
 
@@ -111,11 +103,11 @@ app.post("/api/create-user", async (req, res) => {
     .insert([{ id: user.user.id, email, username, role }]);
 
   if (profileError) {
-    console.error("❌ Erreur profil :", profileError.message);
+    console.error("âŒ Erreur profil :", profileError.message);
     return res.status(400).json({ error: profileError.message });
   }
 
-  console.log("✅ Utilisateur créé :", user.user.id);
+  console.log("âœ… Utilisateur crÃ©Ã© :", user.user.id);
   res.json({ success: true });
 });
 app.post("/api/sync-vignerons", checkAuth, async (req, res) => {
@@ -124,7 +116,7 @@ app.post("/api/sync-vignerons", checkAuth, async (req, res) => {
   if (!Array.isArray(emailsToKeep)) {
     return res
       .status(400)
-      .json({ error: "emailsToKeep doit être un tableau." });
+      .json({ error: "emailsToKeep doit Ãªtre un tableau." });
   }
 
   try {
@@ -134,7 +126,7 @@ app.post("/api/sync-vignerons", checkAuth, async (req, res) => {
       .eq("role", "vigneron");
 
     if (error) {
-      console.error("❌ Erreur récupération profils :", error.message);
+      console.error("âŒ Erreur rÃ©cupÃ©ration profils :", error.message);
       return res.status(500).json({ error: error.message });
     }
 
@@ -152,7 +144,7 @@ app.post("/api/sync-vignerons", checkAuth, async (req, res) => {
       );
       if (authError) {
         console.error(
-          `❌ Erreur Auth delete (${user.email}) :`,
+          `âŒ Erreur Auth delete (${user.email}) :`,
           authError.message
         );
         return res.status(500).json({ error: authError.message });
@@ -164,7 +156,7 @@ app.post("/api/sync-vignerons", checkAuth, async (req, res) => {
 
       if (profileError) {
         console.error(
-          `❌ Erreur profil delete (${user.email}) :`,
+          `âŒ Erreur profil delete (${user.email}) :`,
           profileError.message
         );
         return res.status(500).json({ error: profileError.message });
@@ -173,7 +165,7 @@ app.post("/api/sync-vignerons", checkAuth, async (req, res) => {
 
     res.json({ success: true, deleted: toDelete.map((u) => u.email) });
   } catch (err) {
-    console.error("❌ Erreur interne :", err.message);
+    console.error("âŒ Erreur interne :", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -181,43 +173,77 @@ app.post("/api/import-users", async (req, res) => {
   const { users, emailsToKeep } = req.body;
 
   if (!Array.isArray(users) || !Array.isArray(emailsToKeep)) {
-    return res.status(400).json({ error: "Format de données invalide." });
+    return res.status(400).json({ error: "Format de donnÃ©es invalide." });
   }
 
   const created = [];
   const failed = [];
-  for (const user of users) {
-    const { email, password, role, username } = user;
+  const importedPending = [];
 
-    if (!email || !password || !role || !username) {
+  const normalizeEmail = (value = "") => value.toString().trim().toLowerCase();
+
+  const { data: existingPending, error: pendingFetchError } = await supabase
+    .from("pending_users")
+    .select("email, role")
+    .eq("is_active", false);
+
+  if (pendingFetchError) {
+    return res.status(500).json({ error: pendingFetchError.message });
+  }
+
+  const pendingMap = new Map(
+    (existingPending || []).map((u) => [normalizeEmail(u.email), u])
+  );
+
+  for (const user of users) {
+    const { email, role, username } = user;
+    const normalizedEmail = normalizeEmail(email);
+
+    if (!normalizedEmail || !role || !username) {
       failed.push({ email, error: "Champs manquants" });
       continue;
     }
 
     try {
-      const { data: authUser, error: authError } =
-        await supabase.auth.admin.createUser({
-          email,
-          password,
-          email_confirm: true,
-        });
+      const existingPendingUser = pendingMap.get(normalizedEmail);
 
-      if (authError) {
-        failed.push({ email, error: authError.message });
-        continue;
-      }
+      if (existingPendingUser) {
+        const { error: updatePendingError } = await supabase
+          .from("pending_users")
+          .update({
+            username,
+            role,
+            is_active: false,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("email", normalizedEmail);
 
-      const { error: profileError } = await supabase
-        .from("profiles")
-        .insert([{ id: authUser.user.id, email, username, role }]);
-
-      if (profileError) {
-        failed.push({ email, error: profileError.message });
+        if (updatePendingError) {
+          failed.push({ email: normalizedEmail, error: updatePendingError.message });
+          continue;
+        }
       } else {
-        created.push(email);
+        const { error: insertPendingError } = await supabase
+          .from("pending_users")
+          .insert([
+            {
+              email: normalizedEmail,
+              username,
+              role,
+              is_active: false,
+            },
+          ]);
+
+        if (insertPendingError) {
+          failed.push({ email: normalizedEmail, error: insertPendingError.message });
+          continue;
+        }
       }
+
+      importedPending.push(normalizedEmail);
+      created.push(normalizedEmail);
     } catch (err) {
-      failed.push({ email, error: err.message });
+      failed.push({ email: normalizedEmail, error: err.message });
     }
   }
   try {
@@ -227,12 +253,13 @@ app.post("/api/import-users", async (req, res) => {
       .eq("role", "vigneron");
 
     if (error) {
-      console.error("❌ Erreur récupération vignerons :", error.message);
+      console.error("âŒ Erreur rÃ©cupÃ©ration vignerons :", error.message);
       return res.status(500).json({ error: error.message });
     }
 
+    const normalizedEmailsToKeep = emailsToKeep.map(normalizeEmail);
     const toDelete = existingVignerons.filter(
-      (user) => !emailsToKeep.includes(user.email)
+      (user) => !normalizedEmailsToKeep.includes(normalizeEmail(user.email))
     );
 
     for (const user of toDelete) {
@@ -241,7 +268,7 @@ app.post("/api/import-users", async (req, res) => {
       );
       if (authError) {
         console.error(
-          `❌ Erreur Auth delete (${user.email}) :`,
+          `âŒ Erreur Auth delete (${user.email}) :`,
           authError.message
         );
         return res.status(500).json({ error: authError.message });
@@ -253,21 +280,52 @@ app.post("/api/import-users", async (req, res) => {
 
       if (profileError) {
         console.error(
-          `❌ Erreur profil delete (${user.email}) :`,
+          `âŒ Erreur profil delete (${user.email}) :`,
           profileError.message
         );
         return res.status(500).json({ error: profileError.message });
       }
     }
 
+    const { data: existingAllPending, error: pendingAllError } = await supabase
+      .from("pending_users")
+      .select("email, role")
+      .eq("is_active", false);
+
+    if (pendingAllError) {
+      return res.status(500).json({ error: pendingAllError.message });
+    }
+
+    const pendingVigneronsToDelete = (existingAllPending || []).filter(
+      (user) =>
+        user.role === "vigneron" &&
+        !normalizedEmailsToKeep.includes(normalizeEmail(user.email))
+    );
+
+    if (pendingVigneronsToDelete.length > 0) {
+      const pendingEmailsToDelete = pendingVigneronsToDelete.map((u) =>
+        normalizeEmail(u.email)
+      );
+      const { error: pendingDeleteError } = await supabase
+        .from("pending_users")
+        .delete()
+        .in("email", pendingEmailsToDelete);
+
+      if (pendingDeleteError) {
+        return res.status(500).json({ error: pendingDeleteError.message });
+      }
+    }
+
     res.json({
       success: true,
       created,
+      pendingImported: importedPending,
       failed,
       deleted: toDelete.map((u) => u.email),
+      deletedPending: pendingVigneronsToDelete.map((u) => u.email),
     });
   } catch (err) {
-    console.error("❌ Erreur finale :", err.message);
+    console.error("âŒ Erreur finale :", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -285,7 +343,7 @@ app.get("/api/users", checkUserAndAdmin, async (req, res) => {
     );
 
     if (userError || !userInfo?.user?.id) {
-      return res.status(401).json({ error: "Utilisateur non authentifié" });
+      return res.status(401).json({ error: "Utilisateur non authentifiÃ©" });
     }
 
     const userId = userInfo.user.id;
@@ -299,20 +357,20 @@ app.get("/api/users", checkUserAndAdmin, async (req, res) => {
     if (profileError || profile?.role !== "admin") {
       return res
         .status(403)
-        .json({ error: "Accès réservé aux administrateurs" });
+        .json({ error: "AccÃ¨s rÃ©servÃ© aux administrateurs" });
     }
     const { data, error } = await supabase
       .from("profiles")
       .select("id, username, email, role");
 
     if (error) {
-      console.error("❌ Erreur récupération utilisateurs :", error.message);
+      console.error("âŒ Erreur rÃ©cupÃ©ration utilisateurs :", error.message);
       return res.status(500).json({ error: error.message });
     }
 
     res.json(data);
   } catch (err) {
-    console.error("❌ Erreur interne /api/users :", err.message);
+    console.error("âŒ Erreur interne /api/users :", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -333,7 +391,7 @@ app.delete("/api/users/:id", checkUserAndAdmin, async (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
-    console.error("❌ Erreur suppression utilisateur :", err.message);
+    console.error("âŒ Erreur suppression utilisateur :", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -356,7 +414,7 @@ app.put("/api/users/:id", async (req, res) => {
     .eq("id", id);
 
   if (error) {
-    console.error("❌ PUT utilisateur :", error.message);
+    console.error("âŒ PUT utilisateur :", error.message);
     return res.status(500).json({ success: false, error: error.message });
   }
 
@@ -365,7 +423,7 @@ app.put("/api/users/:id", async (req, res) => {
 
 app.get("/api/users/:id", checkUserAndAdmin, async (req, res) => {
   const { id } = req.params;
-  console.log("🔍 ID reçu:", id);
+  console.log("ðŸ” ID reÃ§u:", id);
 
   const { data, error } = await supabase
     .from("profiles")
@@ -374,7 +432,7 @@ app.get("/api/users/:id", checkUserAndAdmin, async (req, res) => {
     .single();
 
   if (error) {
-    console.error("❌ Erreur Supabase :", error.message);
+    console.error("âŒ Erreur Supabase :", error.message);
     return res.status(500).json({ error: error.message });
   }
 
@@ -396,7 +454,7 @@ app.post("/api/upload-document", upload.single("file"), async (req, res) => {
       .status(500)
       .json({ error: "Erreur lecture fichier temporaire." });
   }
-  const fileName = `${Date.now()}-${normalizeFileName(file.originalname)}`;
+  const fileName = `${Date.now()}-${file.originalname}`;
   try {
     const { error: uploadError } = await supabase.storage
       .from("documents")
@@ -426,13 +484,13 @@ app.post("/api/upload-document", upload.single("file"), async (req, res) => {
     ]);
 
     if (dbError) {
-      console.error("❌ Erreur insert document :", dbError.message);
+      console.error("âŒ Erreur insert document :", dbError.message);
       return res.status(500).json({ error: dbError.message });
     }
 
     res.json({ success: true, file_url: publicUrl });
   } catch (err) {
-    console.error("❌ Erreur serveur API /api/upload-document :", err.message);
+    console.error("âŒ Erreur serveur API /api/upload-document :", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -445,13 +503,13 @@ app.get("/api/documents", checkAuth, async (req, res) => {
       .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("❌ Erreur fetch documents :", error.message);
+      console.error("âŒ Erreur fetch documents :", error.message);
       return res.status(500).json({ error: error.message });
     }
 
     res.json(data);
   } catch (err) {
-    console.error("❌ Erreur serveur GET /api/documents :", err.message);
+    console.error("âŒ Erreur serveur GET /api/documents :", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -468,12 +526,12 @@ app.get("/download/:filename", (req, res) => {
 
 app.post("/api/import-domaines", upload.single("file"), async (req, res) => {
   try {
-    console.log("Fichier reçu :", req.file);
+    console.log("Fichier reÃ§u :", req.file);
 
     const workbook = xlsx.readFile(req.file.path);
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const domaines = xlsx.utils.sheet_to_json(sheet);
-    console.log("Données extraites du fichier :", domaines);
+    console.log("DonnÃ©es extraites du fichier :", domaines);
     const formatted = domaines
       .map((row) => {
         const nom = row.nom?.trim().toLowerCase();
@@ -493,8 +551,7 @@ app.post("/api/import-domaines", upload.single("file"), async (req, res) => {
           variete: row.variete || null,
           nature_vin: row.nature_vin || null,
           competence: row.competence || null,
-          autres_competences: row.autres_competences || null, // Ajout récupération colonne autres_competences
-          implication: row.implication || null, // Ajout récupération colonne implication
+          autres_competences: row.autres_competences || null, // Ajout rÃ©cupÃ©ration colonne autres_competences
         };
       })
       .filter((row) =>
@@ -505,7 +562,7 @@ app.post("/api/import-domaines", upload.single("file"), async (req, res) => {
       new Map(formatted.map((d) => [d.nom, d])).values()
     );
 
-    console.log("Données après nettoyage :", uniquesParNom);
+    console.log("DonnÃ©es aprÃ¨s nettoyage :", uniquesParNom);
     const { error: upsertError } = await supabase
       .from("domaines_viticoles")
       .upsert(uniquesParNom, { onConflict: ["nom"] });
@@ -519,7 +576,7 @@ app.post("/api/import-domaines", upload.single("file"), async (req, res) => {
       .select("nom");
 
     if (fetchError) {
-      console.error("Erreur lors de la récupération :", fetchError);
+      console.error("Erreur lors de la rÃ©cupÃ©ration :", fetchError);
       throw new Error(fetchError.message);
     }
     const nomsDansFichier = uniquesParNom.map((d) => d.nom);
@@ -552,12 +609,12 @@ app.post("/api/import-domaines", upload.single("file"), async (req, res) => {
     try {
       fs.unlinkSync(req.file.path);
     } catch (err) {
-      console.warn("⚠️ Impossible de supprimer le fichier :", err.message);
+      console.warn("âš ï¸ Impossible de supprimer le fichier :", err.message);
     }
   }
 });
 
-// Lister tous les événements
+// Lister tous les Ã©vÃ©nements
 
 app.get("/api/evenements", async (req, res) => {
   const { data, error } = await supabase
@@ -566,14 +623,14 @@ app.get("/api/evenements", async (req, res) => {
     .order("date_evenement", { ascending: true });
 
   if (error) {
-    console.error("❌ Erreur récupération événements :", error.message);
+    console.error("âŒ Erreur rÃ©cupÃ©ration Ã©vÃ©nements :", error.message);
     return res.status(500).json({ error: error.message });
   }
 
   res.json(data);
 });
 
-//  Récupérer un événement par ID
+//  RÃ©cupÃ©rer un Ã©vÃ©nement par ID
 
 app.get("/api/evenements/:id", async (req, res) => {
   const { id } = req.params;
@@ -585,115 +642,63 @@ app.get("/api/evenements/:id", async (req, res) => {
     .single();
 
   if (error || !data) {
-    console.error("❌ Erreur récupération événement :", error?.message);
-    return res.status(404).json({ error: "Événement non trouvé" });
+    console.error("âŒ Erreur rÃ©cupÃ©ration Ã©vÃ©nement :", error?.message);
+    return res.status(404).json({ error: "Ã‰vÃ©nement non trouvÃ©" });
   }
 
   res.json(data);
 });
 
-//  Ajouter un événement (avec lien)
+//  Ajouter un Ã©vÃ©nement (avec lien)
 
 app.post("/api/evenements", async (req, res) => {
-  try {
-    const {
-      titre,
-      lieu,
-      date_evenement,
-      description,
-      type,
-      lien,
-      banniere_url, // L'URL de l'image envoyée depuis le front
-    } = req.body;
+  const { titre, lieu, date_evenement, description, type, lien } = req.body;
 
-    // Vérification basique
-    if (!titre || !lieu || !date_evenement || !type) {
-      return res.status(400).json({
-        success: false,
-        error: "Champs obligatoires manquants.",
-      });
-    }
+  const { data, error } = await supabase
+    .from("evenements")
+    .insert([{ titre, lieu, date_evenement, description, type, lien }])
+    .select()
+    .single();
 
-    // Création de l'objet à insérer
-    const insertObj = {
-      titre,
-      lieu,
-      date_evenement,
-      description,
-      type,
-      lien,
-      banniere_url: banniere_url || null,
-    };
-
-    // Insertion dans la table "evenements"
-    const { data, error } = await supabase
-      .from("evenements")
-      .insert([insertObj])
-      .select()
-      .single();
-
-    if (error) {
-      console.error("❌ Erreur ajout événement :", error.message);
-      return res.status(500).json({
-        success: false,
-        error: "Erreur lors de l'ajout de l'événement.",
-      });
-    }
-
-    res.json({ success: true, event: data });
-  } catch (err) {
-    console.error("❌ Erreur serveur :", err.message);
-    res.status(500).json({ success: false, error: "Erreur serveur." });
+  if (error) {
+    console.error("âŒ Erreur ajout Ã©vÃ©nement :", error.message);
+    return res.status(500).json({ success: false, error: error.message });
   }
+
+  res.json({ success: true, event: data });
 });
 
-//  Modifier un événement existant (avec lien)
+//  Modifier un Ã©vÃ©nement existant (avec lien)
 
 app.put("/api/evenements/:id", async (req, res) => {
   const { id } = req.params;
-  const {
-    titre,
-    lieu,
-    date_evenement,
-    description,
-    type,
-    lien,
-    banniere_url, // Ajout ici
-  } = req.body;
-
-  const updateFields = {
-    titre,
-    lieu,
-    date_evenement,
-    description,
-    type,
-    lien,
-    banniere_url, // Et ici
-  };
+  const { titre, lieu, date_evenement, description, type, lien } = req.body;
 
   const { error } = await supabase
     .from("evenements")
-    .update(updateFields)
+    .update({ titre, lieu, date_evenement, description, type, lien })
     .eq("id", id);
 
   if (error) {
-    console.error("❌ Erreur mise à jour événement :", error.message);
+    console.error("âŒ Erreur mise Ã  jour Ã©vÃ©nement :", error.message);
     return res.status(500).json({ success: false, error: error.message });
   }
 
   res.json({ success: true });
 });
 
-//  Supprimer un événement
+//  Supprimer un Ã©vÃ©nement
 
 app.delete("/api/evenements/:id", async (req, res) => {
   const { id } = req.params;
+
   const { error } = await supabase.from("evenements").delete().eq("id", id);
+
   if (error) {
-    console.error("❌ Erreur suppression événement :", error.message);
-    res.status(500).json({ success: false, error: error.message });
-    return;
+    console.error("âŒ Erreur suppression Ã©vÃ©nement :", error.message);
+    return res.status(500).json({ success: false, error: error.message });
   }
+
   res.json({ success: true });
 });
 
@@ -709,8 +714,8 @@ app.get("/api/domaines", checkAuth, async (req, res) => {
     if (error) throw new Error(error.message);
     res.json(data);
   } catch (err) {
-    console.error("❌ Erreur /api/domaines :", err.message);
-    res.status(500).json({ error: "Erreur lors de la récupération" });
+    console.error("âŒ Erreur /api/domaines :", err.message);
+    res.status(500).json({ error: "Erreur lors de la rÃ©cupÃ©ration" });
   }
 });
 
@@ -723,10 +728,11 @@ app.get("/api/documents/:id", async (req, res) => {
     .select("*")
     .eq("id", id)
     .single();
+
   if (error || !data) {
-    res.status(404).json({ error: "Document non trouvé" });
-    return;
+    return res.status(404).json({ error: "Document non trouvÃ©" });
   }
+
   res.json(data);
 });
 
@@ -734,33 +740,36 @@ app.put("/api/documents/:id", upload.single("file"), async (req, res) => {
   const { id } = req.params;
   let { titre, description, date_publication, categorie, file_url } = req.body;
   let newFileUrl = file_url;
+
   if (req.file) {
     try {
       const fileBuffer = fs.readFileSync(req.file.path);
-      const fileName = `${Date.now()}-${normalizeFileName(
-        req.file.originalname
-      )}`;
+      const fileName = `${Date.now()}-${req.file.originalname}`;
       const { error: uploadError } = await supabase.storage
         .from("documents")
         .upload(fileName, fileBuffer, {
           contentType: req.file.mimetype,
           upsert: true,
         });
+
       if (uploadError) {
         console.error("Erreur Supabase upload :", uploadError.message);
-        res.status(500).json({ error: uploadError.message });
-        return;
+        return res.status(500).json({ error: uploadError.message });
       }
+
       const { publicUrl } = supabase.storage
         .from("documents")
         .getPublicUrl(fileName).data;
+
       newFileUrl = publicUrl;
+
       try {
         fs.unlinkSync(req.file.path);
       } catch (err) {}
     } catch (err) {
-      res.status(500).json({ error: "Erreur upload fichier : " + err.message });
-      return;
+      return res
+        .status(500)
+        .json({ error: "Erreur upload fichier : " + err.message });
     }
   }
   const updateObj = {
@@ -770,47 +779,56 @@ app.put("/api/documents/:id", upload.single("file"), async (req, res) => {
     categorie,
   };
   if (newFileUrl) updateObj.file_url = newFileUrl;
+
   Object.keys(updateObj).forEach(
     (key) =>
       (updateObj[key] === undefined || updateObj[key] === "") &&
       delete updateObj[key]
   );
+
   const { error } = await supabase
     .from("documents")
     .update(updateObj)
     .eq("id", id);
+
   if (error) {
-    res.status(500).json({ success: false, error: error.message });
-    return;
+    return res.status(500).json({ success: false, error: error.message });
   }
+
   res.json({ success: true });
 });
 
 // DELETE un document
 app.delete("/api/documents/:id", async (req, res) => {
   const { id } = req.params;
+
   const { error } = await supabase.from("documents").delete().eq("id", id);
+
   if (error) {
-    res.status(500).json({ success: false, error: error.message });
-    return;
+    return res.status(500).json({ success: false, error: error.message });
   }
+
   res.json({ success: true });
 });
 
 app.post("/api/upload", upload.single("file"), async (req, res) => {
   const file = req.file;
+
   if (!file) {
-    res.status(400).json({ error: "Aucun fichier envoyé." });
-    return;
+    return res.status(400).json({ error: "Aucun fichier envoyÃ©." });
   }
+
   let fileBuffer;
   try {
     fileBuffer = fs.readFileSync(file.path);
   } catch (err) {
-    res.status(500).json({ error: "Erreur lecture fichier temporaire." });
-    return;
+    return res
+      .status(500)
+      .json({ error: "Erreur lecture fichier temporaire." });
   }
-  const fileName = `${Date.now()}-${normalizeFileName(file.originalname)}`;
+
+  const fileName = `${Date.now()}-${file.originalname}`;
+
   try {
     const { error: uploadError } = await supabase.storage
       .from("uploads")
@@ -818,17 +836,19 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
         contentType: file.mimetype,
         upsert: true,
       });
+
     if (uploadError) {
       console.error("Erreur Supabase upload :", uploadError.message);
-      res.status(500).json({ error: uploadError.message });
-      return;
+      return res.status(500).json({ error: uploadError.message });
     }
+
     const { publicUrl } = supabase.storage
       .from("uploads")
       .getPublicUrl(fileName).data;
     try {
       fs.unlinkSync(file.path);
     } catch (err) {}
+
     res.json({ url: publicUrl });
   } catch (err) {
     console.error("Erreur serveur :", err.message);
@@ -839,13 +859,15 @@ app.post("/api/upload", upload.single("file"), async (req, res) => {
 // articles
 
 app.post("/api/articles", upload.single("image"), async (req, res) => {
-  const { titre, description, contenu } = req.body;
+  const { titre, description, contenu, lien } = req.body;
   const file = req.file;
+
   if (!titre || !description || !contenu || !file) {
-    res.status(400).json({ error: "Champs manquants" });
-    return;
+    return res.status(400).json({ error: "Champs manquants" });
   }
-  const fileName = `${Date.now()}-${normalizeFileName(file.originalname)}`;
+
+  const fileName = `${Date.now()}-${file.originalname}`;
+
   try {
     const { error: uploadError } = await supabase.storage
       .from("uploads")
@@ -853,30 +875,34 @@ app.post("/api/articles", upload.single("image"), async (req, res) => {
         contentType: file.mimetype,
         upsert: true,
       });
+
     if (uploadError) {
-      console.error("❌ Erreur upload image :", uploadError.message);
-      res.status(500).json({ error: "Erreur upload image Supabase." });
-      return;
+      console.error("âŒ Erreur upload image :", uploadError.message);
+      return res.status(500).json({ error: "Erreur upload image Supabase." });
     }
+
     const { publicUrl } = supabase.storage
       .from("uploads")
       .getPublicUrl(fileName).data;
+
     const { error: dbError } = await supabase.from("fil_actualite").insert([
       {
         titre,
         description,
         contenu,
+        lien: lien || null,
         image_url: publicUrl,
       },
     ]);
+
     if (dbError) {
-      console.error("❌ Erreur insertion actualité :", dbError.message);
-      res.status(500).json({ error: dbError.message });
-      return;
+      console.error("âŒ Erreur insertion actualitÃ© :", dbError.message);
+      return res.status(500).json({ error: dbError.message });
     }
+
     res.json({ success: true, image_url: publicUrl });
   } catch (err) {
-    console.error("❌ Erreur serveur :", err.message);
+    console.error("âŒ Erreur serveur :", err.message);
     res.status(500).json({ error: err.message });
   }
 });
@@ -899,252 +925,173 @@ app.get("/api/categories", async (req, res) => {
 
     res.json(uniqueCats);
   } catch (err) {
-    console.error("Erreur récupération catégories :", err.message);
+    console.error("Erreur rÃ©cupÃ©ration catÃ©gories :", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Ajouter une question/réponse à la FAQ
-app.post("/api/faq", async (req, res) => {
-  const { question, reponse } = req.body;
-  if (!question || !reponse) {
-    res.status(400).json({ error: "Question et réponse requises." });
-    return;
+// partenaires
+app.get("/api/partenaires", async (req, res) => {
+  try {
+    const { data, error } = await supabase
+      .from("partenaires")
+      .select("*")
+      .order("id", { ascending: true });
+
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-  const { data, error } = await supabase
-    .from("faq")
-    .insert([{ question, reponse }])
-    .select()
-    .single();
-  if (error) {
-    res.status(500).json({ error: error.message });
-    return;
-  }
-  res.json({ success: true, faq: data });
 });
 
-// Modifier une question/réponse de la FAQ
-app.put("/api/faq/:id", async (req, res) => {
-  const { id } = req.params;
-  const { question, reponse } = req.body;
-  if (!question && !reponse) {
-    res.status(400).json({ error: "Aucune donnée à mettre à jour." });
-    return;
-  }
-  const updateObj = {};
-  if (question) updateObj.question = question;
-  if (reponse) updateObj.reponse = reponse;
-  const { error } = await supabase.from("faq").update(updateObj).eq("id", id);
-  if (error) {
-    res.status(500).json({ error: error.message });
-    return;
-  }
-  res.json({ success: true });
-});
+app.post("/api/activate-user", async (req, res) => {
+  const { email, password } = req.body;
 
-// Supprimer une question/réponse de la FAQ
-app.delete("/api/faq/:id", async (req, res) => {
-  const { id } = req.params;
-  const { error } = await supabase.from("faq").delete().eq("id", id);
-  if (error) {
-    res.status(500).json({ error: error.message });
-    return;
-  }
-  res.json({ success: true });
-});
-
-// Ajouter un partenaire
-app.post("/api/partenaires", async (req, res) => {
-  const { nom, description, url, logo_url } = req.body;
-  if (!nom) {
-    res.status(400).json({ error: "Le nom du partenaire est requis." });
-    return;
-  }
-  const { data, error } = await supabase
-    .from("partenaires")
-    .insert([{ nom, description, url, logo_url }])
-    .select()
-    .single();
-  if (error) {
-    res.status(500).json({ error: error.message });
-    return;
-  }
-  res.json({ success: true, partenaire: data });
-});
-
-// Modifier un partenaire
-app.put("/api/partenaires/:id", async (req, res) => {
-  const { id } = req.params;
-  const { nom, description, url, logo_url } = req.body;
-  if (!nom && !description && !url && !logo_url) {
-    res.status(400).json({ error: "Aucune donnée à mettre à jour." });
-    return;
-  }
-  const updateObj = {};
-  if (nom) updateObj.nom = nom;
-  if (description) updateObj.description = description;
-  if (url) updateObj.url = url;
-  if (logo_url) updateObj.logo_url = logo_url;
-  const { error } = await supabase
-    .from("partenaires")
-    .update(updateObj)
-    .eq("id", id);
-  if (error) {
-    res.status(500).json({ error: error.message });
-    return;
-  }
-  res.json({ success: true });
-});
-
-// Supprimer un partenaire
-app.delete("/api/partenaires/:id", async (req, res) => {
-  const { id } = req.params;
-  const { error } = await supabase.from("partenaires").delete().eq("id", id);
-  if (error) {
-    res.status(500).json({ error: error.message });
-    return;
-  }
-  res.json({ success: true });
-});
-
-// presse
-
-app.post("/api/presse", upload.single("image"), async (req, res) => {
-  const file = req.file;
-
-  if (!file) {
-    return res.status(400).json({ error: "Aucune image fournie." });
+  const normalizedEmail = (email || "").toString().trim().toLowerCase();
+  if (!normalizedEmail || !password) {
+    return res.status(400).json({ error: "Email et mot de passe requis." });
   }
 
-  const fileName = `${Date.now()}-${normalizeFileName(file.originalname)}`;
+  if (password.length < 6) {
+    return res
+      .status(400)
+      .json({ error: "Mot de passe trop court (minimum 6 caractères)." });
+  }
 
   try {
-    const fileBuffer = fs.readFileSync(file.path);
+    const { data: pendingUser, error: pendingError } = await supabase
+      .from("pending_users")
+      .select("email, username, role, is_active")
+      .eq("email", normalizedEmail)
+      .single();
 
-    const { error: uploadError } = await supabase.storage
-      .from("presse")
-      .upload(fileName, fileBuffer, {
-        contentType: file.mimetype,
-        upsert: true,
+    if (pendingError || !pendingUser) {
+      return res.status(404).json({
+        error:
+          "Email non autorisé. Demandez à l'administrateur de vous importer.",
       });
-
-    if (uploadError) {
-      return res.status(500).json({ error: "Erreur lors de l'upload." });
     }
 
-    const { publicUrl } = supabase.storage
-      .from("presse")
-      .getPublicUrl(fileName).data;
+    if (pendingUser.is_active) {
+      return res
+        .status(400)
+        .json({ error: "Ce compte a déjà été activé. Connectez-vous." });
+    }
 
-    fs.unlinkSync(file.path);
+    const { data: createdAuth, error: authError } =
+      await supabase.auth.admin.createUser({
+        email: normalizedEmail,
+        password,
+        email_confirm: true,
+      });
 
-    const { data, error: dbError } = await supabase
-      .from("presse")
-      .insert([{ image_url: publicUrl }])
+    if (authError) {
+      return res.status(400).json({ error: authError.message });
+    }
+
+    const userId = createdAuth?.user?.id;
+    if (!userId) {
+      return res.status(500).json({ error: "Création utilisateur incomplète." });
+    }
+
+    const { error: profileError } = await supabase.from("profiles").insert([
+      {
+        id: userId,
+        email: normalizedEmail,
+        username: pendingUser.username,
+        role: pendingUser.role || "vigneron",
+      },
+    ]);
+
+    if (profileError) {
+      await supabase.auth.admin.deleteUser(userId);
+      return res.status(400).json({ error: profileError.message });
+    }
+
+    const { error: pendingUpdateError } = await supabase
+      .from("pending_users")
+      .update({
+        is_active: true,
+        activated_at: new Date().toISOString(),
+      })
+      .eq("email", normalizedEmail);
+
+    if (pendingUpdateError) {
+      return res.status(500).json({ error: pendingUpdateError.message });
+    }
+
+    res.json({ success: true, message: "Compte activé, vous pouvez vous connecter." });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/partenaires", async (req, res) => {
+  try {
+    const { nom, description, image_url, lien_site } = req.body;
+    if (!nom || !description) {
+      return res.status(400).json({ error: "Nom et description requis." });
+    }
+
+    const { data, error } = await supabase
+      .from("partenaires")
+      .insert([
+        {
+          nom,
+          description,
+          image_url: image_url || null,
+          lien_site: lien_site || null,
+        },
+      ])
       .select()
       .single();
 
-    if (dbError) {
-      return res.status(500).json({ error: dbError.message });
-    }
-
-    res.json({ success: true, image: data });
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ success: true, partenaire: data });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.put("/api/presse/:id", upload.single("image"), async (req, res) => {
-  const { id } = req.params;
-  const file = req.file;
-
-  if (!file) {
-    return res.status(400).json({ error: "Aucune image fournie." });
-  }
-
+app.put("/api/partenaires/:id", async (req, res) => {
   try {
-    // Supprimer l'ancienne image du bucket
-    const { data: old, error: oldError } = await supabase
-      .from("presse")
-      .select("image_url")
+    const { id } = req.params;
+    const { nom, description, image_url, lien_site } = req.body;
+
+    const updateObj = { nom, description, image_url, lien_site };
+    Object.keys(updateObj).forEach(
+      (key) => updateObj[key] === undefined && delete updateObj[key]
+    );
+
+    const { data, error } = await supabase
+      .from("partenaires")
+      .update(updateObj)
       .eq("id", id)
+      .select()
       .single();
 
-    if (old && old.image_url) {
-      const path = old.image_url.split("/").pop();
-      await supabase.storage.from("presse").remove([path]);
-    }
-
-    const fileName = `${Date.now()}-${normalizeFileName(file.originalname)}`;
-    const fileBuffer = fs.readFileSync(file.path);
-
-    const { error: uploadError } = await supabase.storage
-      .from("presse")
-      .upload(fileName, fileBuffer, {
-        contentType: file.mimetype,
-        upsert: true,
-      });
-
-    if (uploadError) {
-      return res.status(500).json({ error: uploadError.message });
-    }
-
-    const { publicUrl } = supabase.storage
-      .from("presse")
-      .getPublicUrl(fileName).data;
-
-    fs.unlinkSync(file.path);
-
-    const { error: updateError } = await supabase
-      .from("presse")
-      .update({ image_url: publicUrl })
-      .eq("id", id);
-
-    if (updateError) {
-      return res.status(500).json({ error: updateError.message });
-    }
-
-    res.json({ success: true, image_url: publicUrl });
+    if (error) return res.status(500).json({ error: error.message });
+    res.json({ success: true, partenaire: data });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-app.delete("/api/presse/:id", async (req, res) => {
-  const { id } = req.params;
-
+app.delete("/api/partenaires/:id", async (req, res) => {
   try {
-    const { data: article, error: fetchError } = await supabase
-      .from("presse")
-      .select("image_url")
-      .eq("id", id)
-      .single();
+    const { id } = req.params;
+    const { error } = await supabase.from("partenaires").delete().eq("id", id);
 
-    if (fetchError) {
-      return res.status(500).json({ error: fetchError.message });
-    }
-
-    if (article && article.image_url) {
-      const fileName = article.image_url.split("/").pop();
-      await supabase.storage.from("presse").remove([fileName]);
-    }
-
-    const { error: deleteError } = await supabase
-      .from("presse")
-      .delete()
-      .eq("id", id);
-
-    if (deleteError) {
-      return res.status(500).json({ error: deleteError.message });
-    }
-
+    if (error) return res.status(500).json({ error: error.message });
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
 // Lanceement du serveur
 app.listen(3001, () => {
-  console.log("🚀 API démarrée sur https://render-pfyp.onrender.com/");
+  console.log("ðŸš€ API dÃ©marrÃ©e sur https://render-pfyp.onrender.com/");
 });
+
+
