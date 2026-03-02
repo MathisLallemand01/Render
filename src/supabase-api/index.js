@@ -78,37 +78,59 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-app.post("/api/create-user", async (req, res) => {
+app.post("/api/create-user", checkUserAndAdmin, async (req, res) => {
   const { email, password, role, username } = req.body;
+  const normalizedEmail = (email || "").toString().trim().toLowerCase();
 
-  console.log("ðŸ“¥ DonnÃ©es reÃ§ues :", { email, password, role, username });
-
-  if (!email || !password || !role || !username) {
+  if (!normalizedEmail || !password || !role || !username) {
     return res.status(400).json({ error: "Tous les champs sont requis." });
   }
 
   const { data: user, error } = await supabase.auth.admin.createUser({
-    email,
+    email: normalizedEmail,
     password,
     email_confirm: true,
   });
 
   if (error) {
-    console.error("âŒ Erreur Auth :", error.message);
     return res.status(400).json({ error: error.message });
   }
 
-  const { error: profileError } = await supabase
-    .from("profiles")
-    .insert([{ id: user.user.id, email, username, role }]);
+  const authUserId = user?.user?.id;
+  if (!authUserId) {
+    return res.status(500).json({ error: "Utilisateur auth non créé." });
+  }
+
+  const { error: profileError } = await supabase.from("profiles").upsert(
+    [{ id: authUserId, email: normalizedEmail, username, role }],
+    { onConflict: "id" }
+  );
 
   if (profileError) {
-    console.error("âŒ Erreur profil :", profileError.message);
+    await supabase.auth.admin.deleteUser(authUserId);
     return res.status(400).json({ error: profileError.message });
   }
 
-  console.log("âœ… Utilisateur crÃ©Ã© :", user.user.id);
-  res.json({ success: true });
+  const { error: pendingError } = await supabase.from("pending_users").upsert(
+    [
+      {
+        email: normalizedEmail,
+        username,
+        role,
+        is_active: true,
+        activated_at: new Date().toISOString(),
+        auth_user_id: authUserId,
+        updated_at: new Date().toISOString(),
+      },
+    ],
+    { onConflict: "email" }
+  );
+
+  if (pendingError) {
+    return res.status(400).json({ error: pendingError.message });
+  }
+
+  res.json({ success: true, id: authUserId });
 });
 app.post("/api/sync-vignerons", checkAuth, async (req, res) => {
   const { emailsToKeep } = req.body;
@@ -181,11 +203,12 @@ app.post("/api/import-users", async (req, res) => {
   const importedPending = [];
 
   const normalizeEmail = (value = "") => value.toString().trim().toLowerCase();
+  const normalizeRole = (value = "") => value.toString().trim().toLowerCase();
+  const nowIso = new Date().toISOString();
 
   const { data: existingPending, error: pendingFetchError } = await supabase
     .from("pending_users")
-    .select("email, role")
-    .eq("is_active", false);
+    .select("*");
 
   if (pendingFetchError) {
     return res.status(500).json({ error: pendingFetchError.message });
@@ -196,56 +219,104 @@ app.post("/api/import-users", async (req, res) => {
   );
 
   for (const user of users) {
-    const { email, role, username } = user;
+    const { email, role, username, password } = user;
     const normalizedEmail = normalizeEmail(email);
+    const normalizedRole = normalizeRole(role);
+    const normalizedPassword = (password || "").toString().trim();
+    const existingPendingUser = pendingMap.get(normalizedEmail);
 
-    if (!normalizedEmail || !role || !username) {
+    if (!normalizedEmail || !normalizedRole || !username) {
       failed.push({ email, error: "Champs manquants" });
       continue;
     }
 
     try {
-      const existingPendingUser = pendingMap.get(normalizedEmail);
+      let authUserId = existingPendingUser?.auth_user_id || null;
+      let isActive = !!existingPendingUser?.is_active;
 
-      if (existingPendingUser) {
-        const { error: updatePendingError } = await supabase
-          .from("pending_users")
-          .update({
-            username,
-            role,
-            is_active: false,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("email", normalizedEmail);
-
-        if (updatePendingError) {
-          failed.push({ email: normalizedEmail, error: updatePendingError.message });
-          continue;
-        }
-      } else {
-        const { error: insertPendingError } = await supabase
-          .from("pending_users")
-          .insert([
+      if (normalizedPassword) {
+        if (authUserId) {
+          const { error: updateAuthError } = await supabase.auth.admin.updateUserById(
+            authUserId,
             {
               email: normalizedEmail,
-              username,
-              role,
-              is_active: false,
-            },
-          ]);
+              password: normalizedPassword,
+            }
+          );
+          if (updateAuthError) {
+            failed.push({ email: normalizedEmail, error: updateAuthError.message });
+            continue;
+          }
+        } else {
+          const { data: authUser, error: authCreateError } =
+            await supabase.auth.admin.createUser({
+              email: normalizedEmail,
+              password: normalizedPassword,
+              email_confirm: true,
+            });
+          if (authCreateError) {
+            failed.push({ email: normalizedEmail, error: authCreateError.message });
+            continue;
+          }
+          authUserId = authUser?.user?.id || null;
+          if (!authUserId) {
+            failed.push({ email: normalizedEmail, error: "ID auth introuvable." });
+            continue;
+          }
+        }
 
-        if (insertPendingError) {
-          failed.push({ email: normalizedEmail, error: insertPendingError.message });
+        const { error: profileUpsertError } = await supabase.from("profiles").upsert(
+          [
+            {
+              id: authUserId,
+              email: normalizedEmail,
+              username,
+              role: normalizedRole,
+            },
+          ],
+          { onConflict: "id" }
+        );
+        if (profileUpsertError) {
+          failed.push({
+            email: normalizedEmail,
+            error: profileUpsertError.message,
+          });
           continue;
         }
+        isActive = true;
       }
 
+      const pendingPayload = {
+        email: normalizedEmail,
+        username,
+        role: normalizedRole,
+        is_active: isActive,
+        auth_user_id: authUserId,
+        updated_at: nowIso,
+      };
+      if (isActive) {
+        pendingPayload.activated_at = existingPendingUser?.activated_at || nowIso;
+      }
+
+      const { error: pendingUpsertError } = await supabase
+        .from("pending_users")
+        .upsert([pendingPayload], { onConflict: "email" });
+      if (pendingUpsertError) {
+        failed.push({ email: normalizedEmail, error: pendingUpsertError.message });
+        continue;
+      }
+
+      pendingMap.set(normalizedEmail, {
+        ...(existingPendingUser || {}),
+        ...pendingPayload,
+      });
       importedPending.push(normalizedEmail);
       created.push(normalizedEmail);
     } catch (err) {
       failed.push({ email: normalizedEmail, error: err.message });
     }
   }
+
   try {
     const { data: existingVignerons, error } = await supabase
       .from("profiles")
@@ -289,8 +360,7 @@ app.post("/api/import-users", async (req, res) => {
 
     const { data: existingAllPending, error: pendingAllError } = await supabase
       .from("pending_users")
-      .select("email, role")
-      .eq("is_active", false);
+      .select("email, role");
 
     if (pendingAllError) {
       return res.status(500).json({ error: pendingAllError.message });
@@ -330,113 +400,191 @@ app.post("/api/import-users", async (req, res) => {
   }
 });
 
-app.get("/api/users", checkUserAndAdmin, async (req, res) => {
-  const accessToken = req.headers.authorization?.split(" ")[1];
+const getPendingUserByIdOrEmail = async (identifier) => {
+  const byId = await supabase
+    .from("pending_users")
+    .select("*")
+    .eq("id", identifier)
+    .maybeSingle();
 
-  if (!accessToken) {
-    return res.status(401).json({ error: "Token manquant" });
+  if (byId.data) {
+    return { data: byId.data, lookupField: "id", error: null };
   }
 
+  const byEmail = await supabase
+    .from("pending_users")
+    .select("*")
+    .eq("email", identifier)
+    .maybeSingle();
+
+  if (byEmail.data) {
+    return { data: byEmail.data, lookupField: "email", error: null };
+  }
+
+  return {
+    data: null,
+    lookupField: "id",
+    error: byId.error || byEmail.error,
+  };
+};
+
+app.get("/api/users", checkUserAndAdmin, async (_req, res) => {
   try {
-    const { data: userInfo, error: userError } = await supabase.auth.getUser(
-      accessToken
-    );
-
-    if (userError || !userInfo?.user?.id) {
-      return res.status(401).json({ error: "Utilisateur non authentifiÃ©" });
-    }
-
-    const userId = userInfo.user.id;
-
-    const { data: profile, error: profileError } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", userId)
-      .single();
-
-    if (profileError || profile?.role !== "admin") {
-      return res
-        .status(403)
-        .json({ error: "AccÃ¨s rÃ©servÃ© aux administrateurs" });
-    }
     const { data, error } = await supabase
-      .from("profiles")
-      .select("id, username, email, role");
+      .from("pending_users")
+      .select("*")
+      .order("created_at", { ascending: false });
 
     if (error) {
-      console.error("âŒ Erreur rÃ©cupÃ©ration utilisateurs :", error.message);
       return res.status(500).json({ error: error.message });
     }
 
-    res.json(data);
+    const formatted = (data || []).map((u) => ({
+      id: u.id || u.email,
+      username: u.username || "",
+      email: u.email || "",
+      role: u.role || "vigneron",
+      is_active: !!u.is_active,
+      auth_user_id: u.auth_user_id || null,
+      activated_at: u.activated_at || null,
+    }));
+
+    res.json(formatted);
   } catch (err) {
-    console.error("âŒ Erreur interne /api/users :", err.message);
     res.status(500).json({ error: err.message });
   }
 });
-
-// suppr un user
 
 app.delete("/api/users/:id", checkUserAndAdmin, async (req, res) => {
   const { id } = req.params;
-  try {
-    const { error: authError } = await supabase.auth.admin.deleteUser(id);
-    if (authError) throw new Error(authError.message);
-    const { error: profileError } = await supabase
-      .from("profiles")
-      .delete()
-      .eq("id", id);
 
-    if (profileError) throw new Error(profileError.message);
+  try {
+    const {
+      data: pendingUser,
+      lookupField,
+      error: pendingFetchError,
+    } = await getPendingUserByIdOrEmail(id);
+
+    if (!pendingUser) {
+      return res
+        .status(404)
+        .json({ error: pendingFetchError?.message || "Utilisateur introuvable." });
+    }
+
+    if (pendingUser.auth_user_id) {
+      const { error: authError } = await supabase.auth.admin.deleteUser(
+        pendingUser.auth_user_id
+      );
+      if (authError) throw new Error(authError.message);
+
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .delete()
+        .eq("id", pendingUser.auth_user_id);
+      if (profileError) throw new Error(profileError.message);
+    }
+
+    const { error: pendingDeleteError } = await supabase
+      .from("pending_users")
+      .delete()
+      .eq(lookupField, pendingUser[lookupField]);
+    if (pendingDeleteError) throw new Error(pendingDeleteError.message);
 
     res.json({ success: true });
   } catch (err) {
-    console.error("âŒ Erreur suppression utilisateur :", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Modifier un utilisateur
-
-app.put("/api/users/:id", async (req, res) => {
+app.put("/api/users/:id", checkUserAndAdmin, async (req, res) => {
   const { id } = req.params;
-  const { username, email, password } = req.body;
+  const { username, email, role } = req.body;
+  const normalizedEmail = email ? email.toString().trim().toLowerCase() : undefined;
 
-  const updates = { username, email };
+  try {
+    const {
+      data: pendingUser,
+      lookupField,
+      error: pendingFetchError,
+    } = await getPendingUserByIdOrEmail(id);
 
-  if (password && password.trim() !== "") {
-    updates.password = password;
+    if (!pendingUser) {
+      return res
+        .status(404)
+        .json({ error: pendingFetchError?.message || "Utilisateur introuvable." });
+    }
+
+    const pendingUpdates = {
+      updated_at: new Date().toISOString(),
+    };
+    if (username !== undefined) pendingUpdates.username = username;
+    if (normalizedEmail !== undefined) pendingUpdates.email = normalizedEmail;
+    if (role !== undefined) pendingUpdates.role = role;
+
+    const { error: pendingUpdateError } = await supabase
+      .from("pending_users")
+      .update(pendingUpdates)
+      .eq(lookupField, pendingUser[lookupField]);
+    if (pendingUpdateError) {
+      return res.status(500).json({ success: false, error: pendingUpdateError.message });
+    }
+
+    if (pendingUser.auth_user_id) {
+      if (normalizedEmail !== undefined) {
+        const { error: authUpdateError } = await supabase.auth.admin.updateUserById(
+          pendingUser.auth_user_id,
+          { email: normalizedEmail }
+        );
+        if (authUpdateError) {
+          return res.status(500).json({ success: false, error: authUpdateError.message });
+        }
+      }
+
+      const profileUpdates = {};
+      if (username !== undefined) profileUpdates.username = username;
+      if (normalizedEmail !== undefined) profileUpdates.email = normalizedEmail;
+      if (role !== undefined) profileUpdates.role = role;
+
+      if (Object.keys(profileUpdates).length > 0) {
+        const { error: profileUpdateError } = await supabase
+          .from("profiles")
+          .update(profileUpdates)
+          .eq("id", pendingUser.auth_user_id);
+        if (profileUpdateError) {
+          return res
+            .status(500)
+            .json({ success: false, error: profileUpdateError.message });
+        }
+      }
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
-
-  const { error } = await supabase
-    .from("profiles")
-    .update(updates)
-    .eq("id", id);
-
-  if (error) {
-    console.error("âŒ PUT utilisateur :", error.message);
-    return res.status(500).json({ success: false, error: error.message });
-  }
-
-  res.json({ success: true });
 });
 
 app.get("/api/users/:id", checkUserAndAdmin, async (req, res) => {
   const { id } = req.params;
-  console.log("ðŸ” ID reÃ§u:", id);
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, username, email, role")
-    .eq("id", id)
-    .single();
+  try {
+    const { data, error } = await getPendingUserByIdOrEmail(id);
+    if (!data) {
+      return res.status(404).json({ error: error?.message || "Utilisateur introuvable." });
+    }
 
-  if (error) {
-    console.error("âŒ Erreur Supabase :", error.message);
-    return res.status(500).json({ error: error.message });
+    res.json({
+      id: data.id || data.email,
+      username: data.username || "",
+      email: data.email || "",
+      role: data.role || "vigneron",
+      is_active: !!data.is_active,
+      auth_user_id: data.auth_user_id || null,
+      activated_at: data.activated_at || null,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-
-  res.json(data);
 });
 
 app.post("/api/upload-document", upload.single("file"), async (req, res) => {
@@ -946,11 +1094,16 @@ app.get("/api/partenaires", async (req, res) => {
 });
 
 app.post("/api/activate-user", async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, activation_token } = req.body;
 
   const normalizedEmail = (email || "").toString().trim().toLowerCase();
-  if (!normalizedEmail || !password) {
-    return res.status(400).json({ error: "Email et mot de passe requis." });
+  const inputToken = (activation_token || "").toString().trim();
+  const normalizeToken = (value = "") => value.toString().trim();
+
+  if (!normalizedEmail || !password || !inputToken) {
+    return res
+      .status(400)
+      .json({ error: "Email, mot de passe et token d'activation requis." });
   }
 
   if (password.length < 6) {
@@ -962,7 +1115,7 @@ app.post("/api/activate-user", async (req, res) => {
   try {
     const { data: pendingUser, error: pendingError } = await supabase
       .from("pending_users")
-      .select("email, username, role, is_active")
+      .select("id, email, username, role, is_active, auth_user_id")
       .eq("email", normalizedEmail)
       .single();
 
@@ -973,39 +1126,88 @@ app.post("/api/activate-user", async (req, res) => {
       });
     }
 
-    if (pendingUser.is_active) {
+    if (pendingUser.is_active && pendingUser.auth_user_id) {
       return res
         .status(400)
         .json({ error: "Ce compte a déjà été activé. Connectez-vous." });
     }
 
-    const { data: createdAuth, error: authError } =
-      await supabase.auth.admin.createUser({
-        email: normalizedEmail,
-        password,
-        email_confirm: true,
+    const { data: tokens, error: settingsError } = await supabase
+      .from("settings")
+      .select("key, value")
+      .in("key", ["first_login_public_token", "first_login_admin_token"]);
+
+    if (settingsError) {
+      return res.status(500).json({ error: settingsError.message });
+    }
+
+    const publicToken =
+      tokens?.find((item) => item.key === "first_login_public_token")?.value ||
+      "";
+    const adminToken =
+      tokens?.find((item) => item.key === "first_login_admin_token")?.value || "";
+
+    const expectedToken =
+      (pendingUser.role || "").toLowerCase() === "admin" ? adminToken : publicToken;
+
+    if (!expectedToken) {
+      return res.status(500).json({
+        error: "Token de première connexion non configuré côté administration.",
       });
-
-    if (authError) {
-      return res.status(400).json({ error: authError.message });
     }
 
-    const userId = createdAuth?.user?.id;
-    if (!userId) {
-      return res.status(500).json({ error: "Création utilisateur incomplète." });
+    if (normalizeToken(inputToken) !== normalizeToken(expectedToken)) {
+      return res.status(403).json({ error: "Token d'activation invalide." });
     }
 
-    const { error: profileError } = await supabase.from("profiles").insert([
-      {
-        id: userId,
-        email: normalizedEmail,
-        username: pendingUser.username,
-        role: pendingUser.role || "vigneron",
-      },
-    ]);
+    let userId = pendingUser.auth_user_id || null;
+    let createdNow = false;
+
+    if (userId) {
+      const { error: authUpdateError } = await supabase.auth.admin.updateUserById(
+        userId,
+        {
+          email: normalizedEmail,
+          password,
+        }
+      );
+      if (authUpdateError) {
+        return res.status(400).json({ error: authUpdateError.message });
+      }
+    } else {
+      const { data: createdAuth, error: authError } =
+        await supabase.auth.admin.createUser({
+          email: normalizedEmail,
+          password,
+          email_confirm: true,
+        });
+      if (authError) {
+        return res.status(400).json({ error: authError.message });
+      }
+
+      userId = createdAuth?.user?.id || null;
+      if (!userId) {
+        return res.status(500).json({ error: "Création utilisateur incomplète." });
+      }
+      createdNow = true;
+    }
+
+    const { error: profileError } = await supabase.from("profiles").upsert(
+      [
+        {
+          id: userId,
+          email: normalizedEmail,
+          username: pendingUser.username,
+          role: pendingUser.role || "vigneron",
+        },
+      ],
+      { onConflict: "id" }
+    );
 
     if (profileError) {
-      await supabase.auth.admin.deleteUser(userId);
+      if (createdNow) {
+        await supabase.auth.admin.deleteUser(userId);
+      }
       return res.status(400).json({ error: profileError.message });
     }
 
@@ -1013,7 +1215,9 @@ app.post("/api/activate-user", async (req, res) => {
       .from("pending_users")
       .update({
         is_active: true,
+        auth_user_id: userId,
         activated_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       })
       .eq("email", normalizedEmail);
 
@@ -1021,7 +1225,10 @@ app.post("/api/activate-user", async (req, res) => {
       return res.status(500).json({ error: pendingUpdateError.message });
     }
 
-    res.json({ success: true, message: "Compte activé, vous pouvez vous connecter." });
+    res.json({
+      success: true,
+      message: "Compte activé, vous pouvez vous connecter.",
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
