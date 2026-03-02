@@ -72,6 +72,80 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+const normalizeEmailValue = (value = "") =>
+  value.toString().trim().toLowerCase();
+const normalizeRoleValue = (value = "") =>
+  value.toString().trim().toLowerCase();
+
+const autoSyncPendingAndProfiles = async () => {
+  const nowIso = new Date().toISOString();
+
+  const { data: profiles, error: profilesError } = await supabase
+    .from("profiles")
+    .select("id, email, username, role");
+  if (profilesError) throw new Error(profilesError.message);
+
+  const { data: pendingUsers, error: pendingError } = await supabase
+    .from("pending_users")
+    .select("id, email, username, role, is_active, auth_user_id, activated_at");
+  if (pendingError) throw new Error(pendingError.message);
+
+  const pendingByEmail = new Map(
+    (pendingUsers || [])
+      .filter((u) => u.email)
+      .map((u) => [normalizeEmailValue(u.email), u])
+  );
+
+  const pendingUpserts = [];
+  for (const profile of profiles || []) {
+    if (!profile?.email) continue;
+    const normalizedEmail = normalizeEmailValue(profile.email);
+    const existingPending = pendingByEmail.get(normalizedEmail);
+
+    pendingUpserts.push({
+      ...(existingPending?.id ? { id: existingPending.id } : {}),
+      email: normalizedEmail,
+      username: profile.username || existingPending?.username || "",
+      role: normalizeRoleValue(profile.role || existingPending?.role || "vigneron"),
+      is_active: true,
+      auth_user_id: profile.id,
+      activated_at: existingPending?.activated_at || nowIso,
+      updated_at: nowIso,
+    });
+  }
+
+  if (pendingUpserts.length > 0) {
+    const { error: pendingUpsertError } = await supabase
+      .from("pending_users")
+      .upsert(pendingUpserts, { onConflict: "email" });
+    if (pendingUpsertError) throw new Error(pendingUpsertError.message);
+  }
+
+  const profileUpserts = [];
+  for (const pending of pendingUsers || []) {
+    if (!pending?.is_active || !pending?.auth_user_id || !pending?.email) continue;
+
+    profileUpserts.push({
+      id: pending.auth_user_id,
+      email: normalizeEmailValue(pending.email),
+      username: pending.username || "",
+      role: normalizeRoleValue(pending.role || "vigneron"),
+    });
+  }
+
+  if (profileUpserts.length > 0) {
+    const { error: profileUpsertError } = await supabase
+      .from("profiles")
+      .upsert(profileUpserts, { onConflict: "id" });
+    if (profileUpsertError) throw new Error(profileUpsertError.message);
+  }
+
+  return {
+    pendingUpserts: pendingUpserts.length,
+    profileUpserts: profileUpserts.length,
+  };
+};
+
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads"),
   filename: (req, file, cb) => cb(null, file.originalname),
@@ -129,6 +203,8 @@ app.post("/api/create-user", checkUserAndAdmin, async (req, res) => {
   if (pendingError) {
     return res.status(400).json({ error: pendingError.message });
   }
+
+  await autoSyncPendingAndProfiles();
 
   res.json({ success: true, id: authUserId });
 });
@@ -386,6 +462,8 @@ app.post("/api/import-users", async (req, res) => {
       }
     }
 
+    await autoSyncPendingAndProfiles();
+
     res.json({
       success: true,
       created,
@@ -584,6 +662,15 @@ app.get("/api/users/:id", checkUserAndAdmin, async (req, res) => {
     });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/api/users/sync", checkUserAndAdmin, async (_req, res) => {
+  try {
+    const stats = await autoSyncPendingAndProfiles();
+    res.json({ success: true, ...stats });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -1225,6 +1312,8 @@ app.post("/api/activate-user", async (req, res) => {
       return res.status(500).json({ error: pendingUpdateError.message });
     }
 
+    await autoSyncPendingAndProfiles();
+
     res.json({
       success: true,
       message: "Compte activé, vous pouvez vous connecter.",
@@ -1297,8 +1386,14 @@ app.delete("/api/partenaires/:id", async (req, res) => {
   }
 });
 // Lanceement du serveur
-app.listen(3001, () => {
+app.listen(3001, async () => {
   console.log("ðŸš€ API dÃ©marrÃ©e sur https://render-pfyp.onrender.com/");
+  try {
+    const stats = await autoSyncPendingAndProfiles();
+    console.log("âœ… Sync auto utilisateurs au démarrage :", stats);
+  } catch (err) {
+    console.error("âŒ Échec sync auto au démarrage :", err.message);
+  }
 });
 
 
