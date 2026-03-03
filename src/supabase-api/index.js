@@ -765,28 +765,110 @@ app.post("/api/import-domaines", upload.single("file"), async (req, res) => {
 
     const workbook = xlsx.readFile(req.file.path);
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
-    const domaines = xlsx.utils.sheet_to_json(sheet);
+    const domaines = xlsx.utils.sheet_to_json(sheet, { defval: null });
     console.log("DonnÃ©es extraites du fichier :", domaines);
+
+    const normalizeHeader = (value = "") =>
+      value
+        .toString()
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/[^a-z0-9]/g, "");
+
+    const normalizeCell = (value) => {
+      if (value === null || value === undefined) return null;
+      const parsed = value.toString().trim();
+      return parsed ? parsed : null;
+    };
+
+    const parseCoordinate = (value) => {
+      const parsedValue = normalizeCell(value);
+      if (!parsedValue) return null;
+      const normalized = parsedValue.replace(",", ".").replace(/\s+/g, "");
+      const numberValue = parseFloat(normalized);
+      return Number.isFinite(numberValue) ? numberValue : null;
+    };
+
+    const getCellValue = (row, aliases = []) => {
+      const normalizedRow = Object.entries(row || {}).reduce((acc, [key, value]) => {
+        acc[normalizeHeader(key)] = value;
+        return acc;
+      }, {});
+
+      for (const alias of aliases) {
+        const lookupKey = normalizeHeader(alias);
+        const rawValue = normalizedRow[lookupKey];
+        if (normalizeCell(rawValue) !== null) return rawValue;
+      }
+
+      return null;
+    };
+
     const formatted = domaines
       .map((row) => {
-        const nom = row.nom?.trim().toLowerCase();
+        const nom = normalizeCell(
+          getCellValue(row, ["nom", "domaine", "nom_domaine"])
+        );
+        const cepagesResistants = normalizeCell(
+          getCellValue(row, [
+            "cepages_resistants",
+            "cepages resistants",
+            "cepage_resistant",
+            "cepages-resistant",
+          ])
+        );
+        const variete =
+          normalizeCell(
+            getCellValue(row, ["variete", "varietes", "cepage", "cepages"])
+          ) || cepagesResistants;
+
         return {
-          nom: nom || null,
-          description: row.description || null,
-          adresse: row.adresse || null,
-          certification: row.certification || null,
-          ville: row.ville || null,
-          lat: row.lat ? parseFloat(row.lat) : null,
-          lon: row.lon ? parseFloat(row.lon) : null,
-          telephone: row.telephone || null,
-          email: row.email || null,
-          appellation: row.appellation || null,
-          commune: row.commune || null,
-          type_vigne: row.type_vigne || null,
-          variete: row.variete || null,
-          nature_vin: row.nature_vin || null,
-          competence: row.competence || null,
-          autres_competences: row.autres_competences || null, // Ajout rÃ©cupÃ©ration colonne autres_competences
+          nom: nom ? nom.toLowerCase() : null,
+          description: normalizeCell(getCellValue(row, ["description", "descriptif"])),
+          adresse: normalizeCell(getCellValue(row, ["adresse", "address"])),
+          certification: normalizeCell(
+            getCellValue(row, [
+              "certification",
+              "certifications",
+              "label",
+              "labels",
+              "certifcation",
+            ])
+          ),
+          ville: normalizeCell(getCellValue(row, ["ville"])),
+          lat: parseCoordinate(getCellValue(row, ["lat", "latitude"])),
+          lon: parseCoordinate(
+            getCellValue(row, ["lon", "lng", "long", "longitude"])
+          ),
+          telephone: normalizeCell(
+            getCellValue(row, ["telephone", "tel", "phone", "portable"])
+          ),
+          email: normalizeCell(getCellValue(row, ["email", "mail"])),
+          appellation: normalizeCell(
+            getCellValue(row, ["appellation", "appellations", "aoc", "aop", "vdf"])
+          ),
+          commune: normalizeCell(getCellValue(row, ["commune"])),
+          type_vigne: normalizeCell(
+            getCellValue(row, ["type_vigne", "type de vigne", "typevigne"])
+          ),
+          variete,
+          nature_vin: normalizeCell(
+            getCellValue(row, ["nature_vin", "nature du vin"])
+          ),
+          competence: normalizeCell(
+            getCellValue(row, ["competence", "competences"])
+          ),
+          autres_competences: normalizeCell(
+            getCellValue(row, [
+              "autres_competences",
+              "autre_competence",
+              "autres competences",
+              "autres compétences",
+            ])
+          ),
+          implication: normalizeCell(getCellValue(row, ["implication"])),
         };
       })
       .filter((row) =>
@@ -796,6 +878,13 @@ app.post("/api/import-domaines", upload.single("file"), async (req, res) => {
     const uniquesParNom = Array.from(
       new Map(formatted.map((d) => [d.nom, d])).values()
     );
+
+    if (uniquesParNom.length === 0) {
+      return res.status(400).json({
+        error:
+          "Aucun domaine valide trouvÃ©. VÃ©rifiez la colonne nom/domaine dans le fichier Excel.",
+      });
+    }
 
     console.log("DonnÃ©es aprÃ¨s nettoyage :", uniquesParNom);
     const { error: upsertError } = await supabase
