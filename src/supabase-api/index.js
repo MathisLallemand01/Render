@@ -1186,7 +1186,7 @@ app.post("/api/articles", upload.single("image"), async (req, res) => {
   const { titre, description, contenu, lien } = req.body;
   const file = req.file;
 
-  if (!titre || !description || !contenu || !file) {
+  if (!titre || !contenu || !file) {
     return res.status(400).json({ error: "Champs manquants" });
   }
 
@@ -1212,7 +1212,7 @@ app.post("/api/articles", upload.single("image"), async (req, res) => {
     const { error: dbError } = await supabase.from("fil_actualite").insert([
       {
         titre,
-        description,
+        description: description || null,
         contenu,
         lien: lien || null,
         image_url: publicUrl,
